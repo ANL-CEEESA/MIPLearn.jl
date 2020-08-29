@@ -1,22 +1,19 @@
 using PackageCompiler
 
+using JSON2
 using CPLEX
-using CPLEXW
 using Gurobi
 using JuMP
 using MathOptInterface
 using PyCall
 using TimerOutputs
-using TinyBnB
 
-pkg = [:CPLEX
-       :CPLEXW
+pkg = [:JSON2
+       :CPLEX
        :Gurobi
        :JuMP
        :MathOptInterface
        :PyCall
-       :TimerOutputs
-       :TinyBnB]
+       :TimerOutputs]
 
-@info "Building system image..."
 create_sysimage(pkg, sysimage_path="build/sysimage.so")

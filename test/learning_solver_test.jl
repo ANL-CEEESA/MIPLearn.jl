@@ -14,10 +14,11 @@ using Gurobi
     capacity = 67.0
     
     instance = KnapsackInstance(weights, prices, capacity)
-    dump(instance, "tmp/instance.json.gz")
+    filename = tempname()
+    dump(instance, filename)
     
     instance = KnapsackInstance([0.0], [0.0], 0.0)
-    load!(instance, "tmp/instance.json.gz")
+    load!(instance, filename)
     @test instance.data.weights == weights
     @test instance.data.prices == prices
     @test instance.data.capacity == capacity

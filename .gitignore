@@ -9,3 +9,4 @@ deps/usr/
 docs/build/
 docs/site/
 .ipy*
+build/

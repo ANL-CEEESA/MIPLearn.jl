@@ -3,7 +3,6 @@
 #  Released under the modified BSD license. See COPYING.md for more details.
 
 using JuMP
-using CPLEX
 using MathOptInterface
 const MOI = MathOptInterface
 using TimerOutputs

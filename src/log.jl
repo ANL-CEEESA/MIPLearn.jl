@@ -1,3 +1,7 @@
+#  MIPLearn: Extensible Framework for Learning-Enhanced Mixed-Integer Optimization
+#  Copyright (C) 2020, UChicago Argonne, LLC. All rights reserved.
+#  Released under the modified BSD license. See COPYING.md for more details.
+
 import Logging: min_enabled_level, shouldlog, handle_message
 using Base.CoreLogging, Logging, Printf
 
