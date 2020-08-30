@@ -5,9 +5,17 @@
 using JSON2
 import Base: dump
 
-get_instance_features(instance) = [0.]
-get_variable_features(instance, var, index) = [0.]
+to_model(instance) =
+    error("not implemented: to_model")
+
+get_instance_features(instance) =
+    error("not implemented: get_instance_features")
+
+get_variable_features(instance, var, index) =
+    error("not implemented: get_variable_features")
+
 find_violated_lazy_constraints(instance, model) = []
+
 build_lazy_constraint(instance, model, v) = nothing
 
 dump(instance::PyCall.PyObject, filename) = @pycall instance.dump(filename)

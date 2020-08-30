@@ -2,7 +2,8 @@
 #  Copyright (C) 2020, UChicago Argonne, LLC. All rights reserved.
 #  Released under the modified BSD license. See COPYING.md for more details.
 
-import MIPLearn: get_instance_features,
+import MIPLearn: to_model,
+                 get_instance_features,
                  get_variable_features
                  find_violated_lazy_constraints
 using JuMP
@@ -25,7 +26,6 @@ end
 function get_instance_features(data::KnapsackData)
     return [0.]
 end
-
 
 function get_variable_features(data::KnapsackData, var, index)
     return [0.]
