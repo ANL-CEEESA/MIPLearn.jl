@@ -14,6 +14,8 @@ get_instance_features(instance) =
 get_variable_features(instance, var, index) =
     error("not implemented: get_variable_features")
 
+get_variable_category(instance, var, index) = "default"
+
 find_violated_lazy_constraints(instance, model) = []
 
 build_lazy_constraint(instance, model, v) = nothing
@@ -48,6 +50,9 @@ macro Instance(klass)
                 
             get_variable_features(self, var, index) =
                 get_variable_features(self.data, var, index)
+
+            get_variable_category(self, var, index) =
+                get_variable_category(self.data, var, index)
 
             function find_violated_lazy_constraints(self, model)
                 find_violated_lazy_constraints(self.data, model)
