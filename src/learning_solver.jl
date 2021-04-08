@@ -10,19 +10,18 @@ function LearningSolver(;
                         optimizer,
                         kwargs...,
                        )::LearningSolver
-    py = @pycall miplearn.LearningSolver(;
-                                         kwargs...,
-                                         solver=JuMPSolver(optimizer=optimizer))
+    py = miplearn.LearningSolver(
+        ;
+        kwargs...,
+        solver=JuMPSolver(optimizer=optimizer),
+    )
     return LearningSolver(py)
 end
 
 solve!(solver::LearningSolver, instance; kwargs...) =
-    @pycall solver.py.solve(instance; kwargs...)
+    solver.py.solve(instance; kwargs...)
 
 fit!(solver::LearningSolver, instances; kwargs...) =
-    @pycall solver.py.fit(instances; kwargs...)
-
-add!(solver::LearningSolver, component; kwargs...) =
-    @pycall solver.py.add(component; kwargs...)
+    solver.py.fit(instances; kwargs...)
 
 export LearningSolver

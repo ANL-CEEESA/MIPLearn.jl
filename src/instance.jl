@@ -8,67 +8,56 @@ import Base: dump
 to_model(instance) =
     error("not implemented: to_model")
 
-get_instance_features(instance) =
-    error("not implemented: get_instance_features")
+get_instance_features(instance) = [0.0]
 
-get_variable_features(instance, var, index) =
-    error("not implemented: get_variable_features")
+get_variable_features(instance, varname) = [0.0]
 
-get_variable_category(instance, var, index) = "default"
+get_variable_category(instance, varname) = "default"
 
 find_violated_lazy_constraints(instance, model) = []
 
 build_lazy_constraint(instance, model, v) = nothing
-
-dump(instance::PyCall.PyObject, filename) = @pycall instance.dump(filename)
-load!(instance::PyCall.PyObject, filename) = @pycall instance.load(filename)
 
 macro Instance(klass)
     quote
         @pydef mutable struct Wrapper <: Instance
             function __init__(self, args...; kwargs...)
                 self.data = $(esc(klass))(args...; kwargs...)
-            end
-                
-            function dump(self, filename)
-                prev_data = self.data
-                self.data = JSON2.write(prev_data)
-                Instance.dump(self, filename)
-                self.data = prev_data
-            end
-            
-            function load(self, filename)
-                Instance.load(self, filename)
-                self.data = JSON2.read(self.data, $(esc(klass)))
+                self.training_data = []
+                self.features = miplearn.Features()
             end
                 
             to_model(self) =
                 $(esc(:to_model))(self.data)
                 
             get_instance_features(self) =
-                get_instance_features(self.data)
+                $(esc(:get_instance_features))(self.data)
                 
-            get_variable_features(self, var, index) =
-                get_variable_features(self.data, var, index)
+            get_variable_features(self, varname) =
+                $(esc(:get_variable_features))(self.data, varname)
 
-            get_variable_category(self, var, index) =
-                get_variable_category(self.data, var, index)
+            get_variable_category(self, varname) =
+                $(esc(:get_variable_category))(self.data, varname)
 
-            function find_violated_lazy_constraints(self, model)
+            find_violated_lazy_constraints(self, model) =
                 find_violated_lazy_constraints(self.data, model)
-            end
             
-            function build_lazy_constraint(self, model, v)
+            build_lazy_constraint(self, model, v) =
                 build_lazy_constraint(self.data, model, v)
-            end
+            
+            load(self) = nothing
+
+            flush(self) = nothing
         end
     end
 end
 
 export get_instance_features,
        get_variable_features,
+       get_variable_category,
        find_violated_lazy_constraints,
        build_lazy_constraint,
+       to_model,
        dump,
        load!,
        @Instance

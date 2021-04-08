@@ -17,9 +17,16 @@ end
 function to_model(data::KnapsackData)
     model = Model()
     n = length(data.weights)
-    @variable(model, x[1:n], Bin)
-    @objective(model, Max, sum(x[i] * data.prices[i] for i in 1:n))
-    @constraint(model, sum(x[i] * data.weights[i] for i in 1:n) <= data.capacity)
+    @variable(model, x[0:(n-1)], Bin)
+    @objective(model, Max, sum(x[i] * data.prices[i+1] for i in 0:(n-1)))
+    @constraint(
+        model,
+        eq_capacity,
+        sum(
+            x[i] * data.weights[i+1]
+            for i in 0:(n-1)
+        ) <= data.capacity,
+    )
     return model
 end
 

@@ -1,7 +1,7 @@
 name = "MIPLearn"
 uuid = "2b1277c3-b477-4c49-a15e-7ba350325c68"
 authors = ["Alinson S Xavier <git@axavier.org>"]
-version = "0.1.0"
+version = "0.2.0"
 
 [deps]
 Conda = "8f4d0f93-b110-5947-807f-2305c1781a2d"
