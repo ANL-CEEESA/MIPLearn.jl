@@ -1,6 +1,6 @@
 <h1 align="center">MIPLearn.jl</h1>
 <p align="center">
-  <a href="https://github.com/ANL-CEEESA/MIPLearn/actions">
+  <a href="https://github.com/ANL-CEEESA/MIPLearn.jl/actions">
     <img src="https://github.com/ANL-CEEESA/MIPLearn.jl/workflows/Test/badge.svg">
   </a>
   <a href="https://doi.org/10.5281/zenodo.4287567">
