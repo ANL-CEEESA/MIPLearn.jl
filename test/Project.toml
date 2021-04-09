@@ -1,6 +1,10 @@
+#  MIPLearn: Extensible Framework for Learning-Enhanced Mixed-Integer Optimization
+#  Copyright (C) 2020-2021, UChicago Argonne, LLC. All rights reserved.
+#  Released under the modified BSD license. See COPYING.md for more details.
+
 [deps]
+Cbc = "9961bab8-2fa3-5c5a-9d89-47fab24efd76"
 Conda = "8f4d0f93-b110-5947-807f-2305c1781a2d"
-Gurobi = "2e9cd046-0924-5485-92f1-d5272153d98b"
 JSON2 = "2535ab7d-5cd8-5a07-80ac-9b1792aadce3"
 JuMP = "4076af6c-e467-56ae-b986-b466b2749572"
 MIPLearn = "2b1277c3-b477-4c49-a15e-7ba350325c68"
