@@ -4,18 +4,22 @@
 
 using Test
 using MIPLearn
-using Cbc
+using Gurobi
 using PyCall
+using JuMP
 
 miplearn_tests = pyimport("miplearn.solvers.tests")
+traceback = pyimport("traceback")
 
 @testset "JuMPSolver" begin
-    model = MIPLearn.knapsack_model(
-        [23., 26., 20., 18.],
-        [505., 352., 458., 220.],
-        67.0,
-    )
-    instance = JuMPInstance(model)
-    solver = JuMPSolver(optimizer=Cbc.Optimizer)
-    miplearn_tests.test_internal_solver(solver, instance, model)
+    solver = JuMPSolver(optimizer=Gurobi.Optimizer)
+    try  
+        miplearn_tests.run_internal_solver_tests(solver)
+    catch e
+        if isa(e, PyCall.PyError)
+            printstyled("Uncaught Python exception:\n", bold=true, color=:red)
+            traceback.print_exception(e.T, e.val, e.traceback)
+        end
+        rethrow()
+    end
 end

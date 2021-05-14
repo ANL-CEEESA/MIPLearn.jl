@@ -14,8 +14,10 @@ mutable struct JuMPSolverData
     instance
     model
     bin_vars
-    solution::Union{Nothing, Dict{String,Float64}}
+    solution
     cname_to_constr
+    reduced_costs
+    dual_values
 end
 
 
@@ -26,34 +28,27 @@ Optimizes a given JuMP model while capturing the solver log, then returns that l
 If tee=true, prints the solver log to the standard output as the optimization takes place.
 """
 function optimize_and_capture_output!(model; tee::Bool=false)
-    original_stdout = stdout
-    rd, wr = redirect_stdout()
-    task = @async begin
-        log = ""
-        while true
-            line = String(readavailable(rd))
-            isopen(rd) || break
-            log *= String(line)
-            if tee
-                print(original_stdout, line)
-                flush(original_stdout)
-            end
-        end
-        return log
+    logname = tempname()
+    logfile = open(logname, "w")
+    redirect_stdout(logfile) do 
+        JuMP.optimize!(model)
+        Base.Libc.flush_cstdio()
     end
-    JuMP.optimize!(model)
-    sleep(1)
-    redirect_stdout(original_stdout)
-    close(rd)
-    return fetch(task)
+    close(logfile)
+    log = String(read(logname))
+    rm(logname)
+    if tee
+        println(log)
+    end
+    return log
 end
 
 
 function solve(
     data::JuMPSolverData;
     tee::Bool=false,
-    iteration_cb,
-)::Dict
+    iteration_cb=nothing,
+)
     instance, model = data.instance, data.model
     wallclock_time = 0
     log = ""
@@ -78,14 +73,14 @@ function solve(
         lower_bound = primal_bound
         upper_bound = dual_bound
     end
-    return Dict(
-        "Lower bound" => lower_bound,
-        "Upper bound" => upper_bound,
-        "Sense" => sense,
-        "Wallclock time" => wallclock_time,
-        "Nodes" => 1,
-        "MIP log" => log,
-        "Warm start value" => nothing,
+    return miplearn.solvers.internal.MIPSolveStats(
+        mip_lower_bound=lower_bound,
+        mip_upper_bound=upper_bound,
+        mip_sense=sense,
+        mip_wallclock_time=wallclock_time,
+        mip_nodes=1,
+        mip_log=log,
+        mip_warm_start_value=nothing,
     )
 end
 
@@ -97,24 +92,55 @@ function solve_lp(data::JuMPSolverData; tee::Bool=false)
         JuMP.set_upper_bound(var, 1.0)
         JuMP.set_lower_bound(var, 0.0)
     end
-    log = optimize_and_capture_output!(model, tee=tee)
+    wallclock_time = @elapsed begin
+        log = optimize_and_capture_output!(model, tee=tee)
+    end
     update_solution!(data)
     obj_value = JuMP.objective_value(model)
     for var in bin_vars
         JuMP.set_binary(var)
     end
-    return Dict(
-        "LP value" => obj_value,
-        "LP log" => log,
+    return miplearn.solvers.internal.LPSolveStats(
+        lp_value=obj_value,
+        lp_log=log,
+        lp_wallclock_time=wallclock_time,
     )
 end
 
 
 function update_solution!(data::JuMPSolverData)
-    data.solution = Dict(
-        JuMP.name(var) => JuMP.value(var)
-        for var in JuMP.all_variables(data.model)
-    )
+    vars = JuMP.all_variables(data.model)
+    data.solution = [JuMP.value(var) for var in vars]
+
+    # Reduced costs
+    if has_duals(data.model)
+        data.reduced_costs = []
+        for var in vars
+            rc = 0.0
+            if has_upper_bound(var)
+                rc += shadow_price(UpperBoundRef(var))
+            end
+            if has_lower_bound(var)
+                # FIXME: Remove negative sign
+                rc -= shadow_price(LowerBoundRef(var))
+            end
+            if is_fixed(var)
+                rc += shadow_price(FixRef(var))
+            end
+            push!(data.reduced_costs, rc)
+        end
+
+        data.dual_values = Dict()
+        for (ftype, stype) in JuMP.list_of_constraint_types(data.model)
+            for constr in JuMP.all_constraints(data.model, ftype, stype)
+                # FIXME: Remove negative sign
+                data.dual_values[constr] = -JuMP.dual(constr)
+            end
+        end
+    else
+        data.reduced_costs = nothing
+        data.dual_values = nothing
+    end
 end
 
 
@@ -192,6 +218,151 @@ end
 function get_constraint_sense(data::JuMPSolverData, cname)
     constr = data.cname_to_constr[cname]
     return get_constraint_sense(constr)
+end
+
+
+function get_variables(
+    data::JuMPSolverData;
+    with_static::Bool,
+)
+    vars = JuMP.all_variables(data.model)
+    lb, ub, types, obj_coeffs = nothing, nothing, nothing, nothing
+    rc = nothing
+
+    # Variable names
+    names = Tuple(JuMP.name.(vars))
+
+    if with_static
+        # Lower bounds
+        lb = Tuple(
+            JuMP.is_binary(v) ? 0.0 :
+                JuMP.has_lower_bound(v) ? JuMP.lower_bound(v) :
+                    -Inf
+            for v in vars
+        )
+
+        # Upper bounds
+        ub = Tuple(
+            JuMP.is_binary(v) ? 1.0 :
+                JuMP.has_upper_bound(v) ? JuMP.upper_bound(v) :
+                    Inf
+            for v in vars
+        )
+
+        # Variable types
+        types = Tuple(
+            JuMP.is_binary(v) ? "B" :
+                JuMP.is_integer(v) ? "I" :
+                    "C"
+            for v in vars
+        )
+
+        # Objective function coefficients
+        obj = objective_function(data.model)
+        obj_coeffs = Tuple(
+            v ∈ keys(obj.terms) ? obj.terms[v] : 0.0
+            for v in vars
+        )
+    end
+
+    rc = data.reduced_costs === nothing ? nothing : Tuple(data.reduced_costs)
+    values = data.solution === nothing ? nothing : Tuple(data.solution)
+
+    return miplearn.features.VariableFeatures(
+        names=names,
+        lower_bounds=lb,
+        upper_bounds=ub,
+        types=types,
+        obj_coeffs=obj_coeffs,
+        reduced_costs=rc,
+        values=values,
+    )
+end
+
+
+function get_constraints(
+    data::JuMPSolverData;
+    with_static::Bool,
+)
+    names = []
+    senses, lhs, rhs = nothing, nothing, nothing
+    dual_values = nothing
+
+    if data.dual_values !== nothing
+        dual_values = []
+    end
+
+    if with_static
+        senses, lhs, rhs = [], [], []
+    end
+
+    for (ftype, stype) in JuMP.list_of_constraint_types(data.model)
+        ftype in [JuMP.AffExpr, JuMP.VariableRef] || error("Unsupported constraint type: ($ftype, $stype)")
+        for constr in JuMP.all_constraints(data.model, ftype, stype)
+            cset = MOI.get(
+                constr.model.moi_backend,
+                MOI.ConstraintSet(),
+                constr.index,
+            )
+            name = JuMP.name(constr)
+            length(name) > 0 || continue
+            push!(names, name)
+
+            if data.dual_values !== nothing
+                push!(dual_values, data.dual_values[constr])
+            end
+
+            if with_static
+                if ftype == JuMP.AffExpr
+                    push!(
+                        lhs,
+                        Tuple(
+                            (
+                                MOI.get(
+                                    constr.model.moi_backend,
+                                    MOI.VariableName(),
+                                    term.variable_index
+                                ),
+                                term.coefficient,
+                            )
+                            for term in MOI.get(
+                                constr.model.moi_backend,
+                                MOI.ConstraintFunction(),
+                                constr.index,
+                            ).terms
+                        )
+                    )
+                    if stype == MOI.EqualTo{Float64}
+                        push!(senses, "=")
+                        push!(rhs, cset.value)
+                    elseif stype == MOI.LessThan{Float64}
+                        push!(senses, "<")
+                        push!(rhs, cset.upper)
+                    elseif stype == MOI.GreaterThan{Float64}
+                        push!(senses, ">")
+                        push!(rhs, cset.lower)
+                    else
+                        error("Unsupported set: $stype")
+                    end
+                else
+                    error("Unsupported ftype: $ftype")
+                end
+            end
+        end
+    end
+
+    function to_tuple(x)
+        x !== nothing || return nothing
+        return Tuple(x)
+    end
+
+    return miplearn.features.ConstraintFeatures(
+        names=to_tuple(names),
+        senses=to_tuple(senses),
+        lhs=to_tuple(lhs),
+        rhs=to_tuple(rhs),
+        dual_values=to_tuple(dual_values),
+    )
 end
 
 
@@ -355,6 +526,23 @@ function get_constraint_sense(
     return "="
 end
 
+# Test instances
+# ---------------------------------------------
+function build_test_instance_knapsack()
+    weights = [23.0, 26.0, 20.0, 18.0]
+    prices = [505.0, 352.0, 458.0, 220.0]
+    capacity = 67.0
+
+    model = Model()
+    n = length(weights)
+    @variable(model, x[0:n-1], Bin)
+    @variable(model, z, lower_bound=0.0, upper_bound=capacity)
+    @objective(model, Max, sum(x[i-1] * prices[i] for i in 1:n))
+    @constraint(model, eq_capacity, sum(x[i-1] * weights[i] for i in 1:n) - z == 0)
+
+    return JuMPInstance(model)
+end
+
 
 @pydef mutable struct JuMPSolver <: miplearn.solvers.internal.InternalSolver
     function __init__(self; optimizer)
@@ -366,6 +554,8 @@ end
             nothing,  # bin_vars
             nothing,  # solution
             nothing,  # cname_to_constr
+            nothing,  # reduced_costs
+            nothing,  # dual_values
         ) 
     end
 
@@ -381,9 +571,9 @@ end
     solve(
         self;
         tee=false,
-        iteration_cb,
-        lazy_cb,
-        user_cut_cb,
+        iteration_cb=nothing,
+        lazy_cb=nothing,
+        user_cut_cb=nothing,
     ) = solve(
         self.data,
         tee=tee,
@@ -396,8 +586,8 @@ end
     get_solution(self) =
         self.data.solution
 
-    get_variables(self) =
-        get_variables(self.data)
+    get_variables(self; with_static=true) =
+        get_variables(self.data; with_static=with_static)
     
     set_branching_priorities(self, priorities) =
         @warn "JuMPSolver: set_branching_priorities not implemented"
@@ -411,6 +601,9 @@ end
     is_infeasible(self) =
         is_infeasible(self.data)
 
+    get_constraints(self; with_static=true) =
+        get_constraints(self.data; with_static=with_static)
+
     get_constraint_ids(self) =
         get_constraint_ids(self.data)
 
@@ -423,7 +616,44 @@ end
     get_constraint_sense(self, cname) =
         get_constraint_sense(self.data, cname)
 
+    build_test_instance_knapsack(self) =
+        build_test_instance_knapsack()
+
     clone(self) = self
+
+    get_variable_attrs(self) =  [
+        "names",
+        # "basis_status",
+        "categories",
+        "lower_bounds",
+        "obj_coeffs",
+        "reduced_costs",
+        # "sa_lb_down",
+        # "sa_lb_up",
+        # "sa_obj_down",
+        # "sa_obj_up",
+        # "sa_ub_down",
+        # "sa_ub_up",
+        "types",
+        "upper_bounds",
+        "user_features",
+        "values",
+    ]
+
+    get_constraint_attrs(self) = [
+        # "basis_status",
+        "categories",
+        "dual_values",
+        "lazy",
+        "lhs",
+        "names",
+        "rhs",
+        # "sa_rhs_down",
+        # "sa_rhs_up",
+        "senses",
+        # "slacks",
+        "user_features",
+    ]
 
     add_cut(self) = error("not implemented")
     extract_constraint(self) = error("not implemented")
@@ -433,6 +663,11 @@ end
     get_inequality_slacks(self) = error("not implemented")
     get_dual(self) = error("not implemented")
     get_sense(self) = error("not implemented")
+    build_test_instance_infeasible(self) = error("not implemented")
+    build_test_instance_redundancy(self) = error("not implemented")
+    get_constraints_old(self) = error("not implemented")
+    is_constraint_satisfied_old(self) = error("not implemented")
+    remove_constraint(self) = error("not implemented")
 end
 
 export JuMPSolver, solve!, fit!, add!
