@@ -83,6 +83,33 @@ function _update_solution!(data::JuMPSolverData)
 end
 
 
+function add_constraints(
+    data::JuMPSolverData;
+    lhs::Vector{Vector{Tuple{String, Float64}}},
+    rhs::Vector{Float64},
+    senses::Vector{String},
+    names::Vector{String},
+)::Nothing
+    for (i, sense) in enumerate(senses)
+        lhs_expr = AffExpr(0.0)
+        for (varname, coeff) in lhs[i]
+            var = data.varname_to_var[varname]
+            add_to_expression!(lhs_expr, var, coeff)
+        end
+        if sense == "<"
+            constr = @constraint(data.model, lhs_expr <= rhs[i])
+        elseif sense == ">"
+            constr = @constraint(data.model, lhs_expr >= rhs[i])
+        else
+            constr = @constraint(data.model, lhs_expr == rhs[i])
+        end
+        set_name(constr, names[i])
+        data.cname_to_constr[names[i]] = constr
+    end
+    return
+end
+
+
 function are_constraints_satisfied(
     data::JuMPSolverData;
     lhs::Vector{Vector{Tuple{String, Float64}}},
@@ -109,30 +136,28 @@ function are_constraints_satisfied(
 end
 
 
-function add_constraints(
-    data::JuMPSolverData;
-    lhs::Vector{Vector{Tuple{String, Float64}}},
-    rhs::Vector{Float64},
-    senses::Vector{String},
-    names::Vector{String},
-)::Nothing
-    for (i, sense) in enumerate(senses)
-        lhs_expr = AffExpr(0.0)
-        for (varname, coeff) in lhs[i]
-            var = data.varname_to_var[varname]
-            add_to_expression!(lhs_expr, var, coeff)
-        end
-        if sense == "<"
-            constr = @constraint(data.model, lhs_expr <= rhs[i])
-        elseif sense == ">"
-            constr = @constraint(data.model, lhs_expr >= rhs[i])
-        else
-            constr = @constraint(data.model, lhs_expr == rhs[i])
-        end
-        set_name(constr, names[i])
-        data.cname_to_constr[names[i]] = constr
-    end
-    return
+function build_test_instance_knapsack()
+    weights = [23.0, 26.0, 20.0, 18.0]
+    prices = [505.0, 352.0, 458.0, 220.0]
+    capacity = 67.0
+
+    model = Model()
+    n = length(weights)
+    @variable(model, x[0:n-1], Bin)
+    @variable(model, z, lower_bound=0.0, upper_bound=capacity)
+    @objective(model, Max, sum(x[i-1] * prices[i] for i in 1:n))
+    @constraint(model, eq_capacity, sum(x[i-1] * weights[i] for i in 1:n) - z == 0)
+
+    return JuMPInstance(model)
+end
+
+
+function build_test_instance_infeasible()
+    model = Model()
+    @variable(model, x, Bin)
+    @objective(model, Max, x)
+    @constraint(model, x >= 2)
+    return JuMPInstance(model)
 end
 
 
@@ -166,9 +191,15 @@ function solve(
             break
         end
     end
-    _update_solution!(data)
-    primal_bound = JuMP.objective_value(model)
-    dual_bound = JuMP.objective_bound(model)
+    if is_infeasible(data)
+        data.solution = Dict()
+        primal_bound = nothing
+        dual_bound = nothing
+    else
+        _update_solution!(data)
+        primal_bound = JuMP.objective_value(model)
+        dual_bound = JuMP.objective_bound(model)
+    end
     if JuMP.objective_sense(model) == MOI.MIN_SENSE
         sense = "min"
         lower_bound = dual_bound
@@ -200,8 +231,13 @@ function solve_lp(data::JuMPSolverData; tee::Bool=false)
     wallclock_time = @elapsed begin
         log = _optimize_and_capture_output!(model, tee=tee)
     end
-    _update_solution!(data)
-    obj_value = JuMP.objective_value(model)
+    if is_infeasible(data)
+        data.solution = Dict()
+        obj_value = nothing
+    else
+        _update_solution!(data)
+        obj_value = JuMP.objective_value(model)
+    end
     for var in bin_vars
         JuMP.set_binary(var)
     end
@@ -213,17 +249,24 @@ function solve_lp(data::JuMPSolverData; tee::Bool=false)
 end
 
 
-function set_instance!(data::JuMPSolverData, instance, model::JuMP.Model)
+function set_instance!(
+    data::JuMPSolverData,
+    instance;
+    model::Union{Nothing,JuMP.Model},
+)::Nothing
     data.instance = instance
+    if model === nothing
+        model = instance.to_model()
+    end
     data.model = model
     data.bin_vars = [
         var
-        for var in JuMP.all_variables(data.model)
+        for var in JuMP.all_variables(model)
         if JuMP.is_binary(var)
     ]
     data.varname_to_var = Dict(
         JuMP.name(var) => var
-        for var in JuMP.all_variables(data.model)
+        for var in JuMP.all_variables(model)
     )
     JuMP.set_optimizer(model, data.optimizer_factory)
     data.cname_to_constr = Dict()
@@ -234,6 +277,7 @@ function set_instance!(data::JuMPSolverData, instance, model::JuMP.Model)
             data.cname_to_constr[name] = constr
         end
     end
+    return
 end
 
 
@@ -256,7 +300,10 @@ end
 
 
 function is_infeasible(data::JuMPSolverData)
-    return JuMP.termination_status(data.model) == MOI.INFEASIBLE
+    return JuMP.termination_status(data.model) in [
+        MOI.INFEASIBLE,
+        MOI.INFEASIBLE_OR_UNBOUNDED,
+    ]
 end
 
 
@@ -409,22 +456,6 @@ function get_constraints(
 end
 
 
-function build_test_instance_knapsack()
-    weights = [23.0, 26.0, 20.0, 18.0]
-    prices = [505.0, 352.0, 458.0, 220.0]
-    capacity = 67.0
-
-    model = Model()
-    n = length(weights)
-    @variable(model, x[0:n-1], Bin)
-    @variable(model, z, lower_bound=0.0, upper_bound=capacity)
-    @objective(model, Max, sum(x[i-1] * prices[i] for i in 1:n))
-    @constraint(model, eq_capacity, sum(x[i-1] * weights[i] for i in 1:n) - z == 0)
-
-    return JuMPInstance(model)
-end
-
-
 @pydef mutable struct JuMPSolver <: miplearn.solvers.internal.InternalSolver
     function __init__(self, optimizer_factory)
         self.data = JuMPSolverData(
@@ -459,19 +490,18 @@ end
         )...)
 
     build_test_instance_infeasible(self) =
-        error("not implemented")
+        build_test_instance_infeasible()
 
     build_test_instance_knapsack(self) =
         build_test_instance_knapsack()
     
-    # FIXME: Actually clone instead of returning self
-    clone(self) = self
+    clone(self) = JuMPSolver(self.data.optimizer_factory)
 
     fix(self, solution) =
         fix!(self.data, solution)
     
     get_solution(self) =
-        self.data.solution
+        isempty(self.data.solution) ? nothing : self.data.solution
 
     get_constraints(
         self;
@@ -529,8 +559,8 @@ end
             [n for n in names],
         )
 
-    set_instance(self, instance, model) =
-        set_instance!(self.data, instance, model)
+    set_instance(self, instance, model=nothing) =
+        set_instance!(self.data, instance, model=model)
     
     set_warm_start(self, solution) =
         set_warm_start!(self.data, solution)
