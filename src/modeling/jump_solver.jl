@@ -109,6 +109,46 @@ function are_constraints_satisfied(
 end
 
 
+function add_constraints(
+    data::JuMPSolverData;
+    lhs::Vector{Vector{Tuple{String, Float64}}},
+    rhs::Vector{Float64},
+    senses::Vector{String},
+    names::Vector{String},
+)::Nothing
+    for (i, sense) in enumerate(senses)
+        lhs_expr = AffExpr(0.0)
+        for (varname, coeff) in lhs[i]
+            var = data.varname_to_var[varname]
+            add_to_expression!(lhs_expr, var, coeff)
+        end
+        if sense == "<"
+            constr = @constraint(data.model, lhs_expr <= rhs[i])
+        elseif sense == ">"
+            constr = @constraint(data.model, lhs_expr >= rhs[i])
+        else
+            constr = @constraint(data.model, lhs_expr == rhs[i])
+        end
+        set_name(constr, names[i])
+        data.cname_to_constr[names[i]] = constr
+    end
+    return
+end
+
+
+function remove_constraints(
+    data::JuMPSolverData,
+    names::Vector{String},
+)::Nothing
+    for name in names
+        constr = data.cname_to_constr[name]
+        delete(data.model, constr)
+        delete!(data.cname_to_constr, name)
+    end
+    return
+end
+
+
 function solve(
     data::JuMPSolverData;
     tee::Bool=false,
@@ -401,7 +441,13 @@ end
     end
 
     add_constraints(self, cf) =
-        error("not implemented")
+        add_constraints(
+            self.data,
+            lhs=[[term for term in constr] for constr in cf.lhs],
+            rhs=[r for r in cf.rhs],
+            senses=[s for s in cf.senses],
+            names=[n for n in cf.names],
+        )
 
     are_constraints_satisfied(self, cf; tol=1e-5) =
         tuple(are_constraints_satisfied(
@@ -478,7 +524,10 @@ end
         is_infeasible(self.data)
 
     remove_constraints(self, names) =
-        error("not implemented")
+        remove_constraints(
+            self.data,
+            [n for n in names],
+        )
 
     set_instance(self, instance, model) =
         set_instance!(self.data, instance, model)
