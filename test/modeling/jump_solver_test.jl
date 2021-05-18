@@ -12,7 +12,7 @@ miplearn_tests = pyimport("miplearn.solvers.tests")
 traceback = pyimport("traceback")
 
 @testset "JuMPSolver" begin
-    solver = JuMPSolver(optimizer=Gurobi.Optimizer)
+    solver = JuMPSolver(Gurobi.Optimizer)
     try  
         miplearn_tests.run_internal_solver_tests(solver)
     catch e
