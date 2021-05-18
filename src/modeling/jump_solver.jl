@@ -10,12 +10,12 @@ using TimerOutputs
 
 mutable struct JuMPSolverData
     optimizer_factory
-    varname_to_var::Dict{AbstractString,VariableRef}
-    cname_to_constr::Dict{AbstractString,JuMP.ConstraintRef}
+    varname_to_var::Dict{String,VariableRef}
+    cname_to_constr::Dict{String,JuMP.ConstraintRef}
     instance::Union{Nothing,PyObject}
     model::Union{Nothing,JuMP.Model}
     bin_vars::Vector{JuMP.VariableRef}
-    solution::Vector{Float64}
+    solution::Dict{JuMP.VariableRef,Float64}
     reduced_costs::Vector{Float64}
     dual_values::Dict{JuMP.ConstraintRef,Float64}
 end
@@ -46,7 +46,10 @@ end
 
 function _update_solution!(data::JuMPSolverData)
     vars = JuMP.all_variables(data.model)
-    data.solution = [JuMP.value(var) for var in vars]
+    data.solution = Dict(
+        var => JuMP.value(var)
+        for var in vars
+    )
 
     # Reduced costs
     if has_duals(data.model)
@@ -77,6 +80,32 @@ function _update_solution!(data::JuMPSolverData)
         data.reduced_costs = []
         data.dual_values = Dict()
     end
+end
+
+
+function are_constraints_satisfied(
+    data::JuMPSolverData;
+    lhs::Vector{Vector{Tuple{String, Float64}}},
+    rhs::Vector{Float64},
+    senses::Vector{String},
+    tol::Float64=1e-5,
+)::Vector{Bool}
+    result = []
+    for (i, sense) in enumerate(senses)
+        lhs_value = 0.0
+        for (varname, coeff) in lhs[i]
+            var = data.varname_to_var[varname]
+            lhs_value += data.solution[var] * coeff
+        end
+        if sense == "<"
+            push!(result, lhs_value <= rhs[i] + tol)
+        elseif sense == ">"
+            push!(result, lhs_value >= rhs[i] - tol)
+        else
+            push!(result, abs(lhs_value - rhs[i]) <= tol)
+        end
+    end
+    return result
 end
 
 
@@ -197,10 +226,15 @@ function get_variables(
 )
     vars = JuMP.all_variables(data.model)
     lb, ub, types, obj_coeffs = nothing, nothing, nothing, nothing
-    rc = nothing
+    values, rc = nothing, nothing
 
     # Variable names
     names = Tuple(JuMP.name.(vars))
+
+    # Primal values
+    if !isempty(data.solution)
+        values = Tuple([data.solution[v] for v in vars])
+    end
 
     if with_static
         # Lower bounds
@@ -236,7 +270,6 @@ function get_variables(
     end
 
     rc = isempty(data.reduced_costs) ? nothing : Tuple(data.reduced_costs)
-    values = isempty(data.solution) ? nothing : Tuple(data.solution)
 
     return miplearn.features.VariableFeatures(
         names=names,
@@ -361,7 +394,7 @@ end
             nothing,  # instance
             nothing,  # model
             [],  # bin_vars
-            [],  # solution
+            Dict(),  # solution
             [],  # reduced_costs
             Dict(),  # dual_values
         )
@@ -371,7 +404,13 @@ end
         error("not implemented")
 
     are_constraints_satisfied(self, cf; tol=1e-5) =
-        error("not implemented")
+        tuple(are_constraints_satisfied(
+            self.data,
+            lhs=[[term for term in constr] for constr in cf.lhs],
+            rhs=[r for r in cf.rhs],
+            senses=[s for s in cf.senses],
+            tol=tol,
+        )...)
 
     build_test_instance_infeasible(self) =
         error("not implemented")
