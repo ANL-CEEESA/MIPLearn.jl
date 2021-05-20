@@ -6,27 +6,21 @@ struct LearningSolver
     py::PyCall.PyObject
 end
 
-function LearningSolver(
-    ;
-    optimizer,
-)::LearningSolver
-    py = miplearn.LearningSolver(solver=JuMPSolver(optimizer=optimizer))
+
+function LearningSolver(optimizer_factory)::LearningSolver
+    py = miplearn.LearningSolver(solver=JuMPSolver(optimizer_factory))
     return LearningSolver(py)
 end
 
-function solve!(solver::LearningSolver, model::Model)
-    instance = JuMPInstance(model)
-    mip_stats = solver.py.solve(instance)
-    push!(
-        model.ext[:miplearn][:training_samples],
-        instance.training_data[1].__dict__,
-    )
-    return mip_stats
+
+function solve!(solver::LearningSolver, instance::JuMPInstance)
+    return @python_call solver.py.solve(instance.py)
 end
 
-function fit!(solver::LearningSolver, models::Array{Model})
-    instances = [JuMPInstance(m) for m in models]
-    solver.py.fit(instances)
+
+function fit!(solver::LearningSolver, instances::Vector{JuMPInstance})
+    @python_call solver.py.fit([instance.py for instance in instances])
 end
 
-export LearningSolver
+
+export LearningSolver, solve!, fit!

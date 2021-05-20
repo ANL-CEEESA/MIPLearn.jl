@@ -4,7 +4,7 @@
 
 using JuMP
 using MIPLearn
-using Cbc
+using Gurobi
 
 @testset "macros" begin
     weights = [1.0, 2.0, 3.0]
@@ -38,19 +38,11 @@ using Cbc
     @test model.ext[:miplearn][:constraint_categories][c1] == "c1"
     @test model.ext[:miplearn][:instance_features] == [5.0]
 
-    # solver = LearningSolver(optimizer=Cbc.Optimizer)
-    
-    # # Should return correct stats
-    # stats = solve!(solver, model)
-    # @test stats["Lower bound"] == 11.0
-
-    # # Should add a sample to the training data
-    # @test length(model.ext[:miplearn][:training_samples]) == 1
-    # sample = model.ext[:miplearn][:training_samples][1]
-    # @test sample["lower_bound"] == 11.0
-    # @test sample["solution"]["x[1]"] == 1.0
-
-    # fit!(solver, [model])
-
-    # solve!(solver, model)
+    solver = LearningSolver(Gurobi.Optimizer)
+    instance = JuMPInstance(model)
+    stats = solve!(solver, instance)
+    @test stats["mip_lower_bound"] == 11.0
+    @test length(instance.py.samples) == 1
+    fit!(solver, [instance])
+    solve!(solver, instance)
 end

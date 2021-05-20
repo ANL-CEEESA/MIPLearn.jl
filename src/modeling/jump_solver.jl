@@ -148,7 +148,7 @@ function build_test_instance_knapsack()
     @objective(model, Max, sum(x[i-1] * prices[i] for i in 1:n))
     @constraint(model, eq_capacity, sum(x[i-1] * weights[i] for i in 1:n) - z == 0)
 
-    return JuMPInstance(model)
+    return PyJuMPInstance(model)
 end
 
 
@@ -157,7 +157,7 @@ function build_test_instance_infeasible()
     @variable(model, x, Bin)
     @objective(model, Max, x)
     @constraint(model, x >= 2)
-    return JuMPInstance(model)
+    return PyJuMPInstance(model)
 end
 
 
@@ -528,8 +528,11 @@ end
         "user_features",
     ]
     
-    get_variables(self; with_static=true) =
-        get_variables(self.data; with_static=with_static)
+    get_variables(
+        self;
+        with_static=true,
+        with_sa=true,
+    ) = get_variables(self.data; with_static=with_static)
     
     get_variable_attrs(self) =  [
         "names",

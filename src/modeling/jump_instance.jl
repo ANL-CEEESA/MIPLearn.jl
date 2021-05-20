@@ -2,51 +2,57 @@
 #  Copyright (C) 2020-2021, UChicago Argonne, LLC. All rights reserved.
 #  Released under the modified BSD license. See COPYING.md for more details.
 
-@pydef mutable struct JuMPInstance <: miplearn.Instance
+using JuMP
+
+
+@pydef mutable struct PyJuMPInstance <: miplearn.Instance
     function __init__(self, model)
         self.model = model
-
-        # init_miplearn_ext(model)
-        # features = model.ext[:miplearn][:features]
-        # # Copy training data
-        # training_data = []
-        # for sample in self.model.ext[:miplearn][:training_samples]
-        #     pysample = miplearn.TrainingSample()
-        #     pysample.__dict__ = sample
-        #     push!(training_data, pysample)
-        # end
-        # self.training_data = training_data
-
-        # # Copy features to data classes
-        # self.features = miplearn.Features(
-        #     instance=miplearn.InstanceFeatures(
-        #         user_features=PyCall.array2py(
-        #             features[:instance][:user_features],
-        #         ),
-        #         lazy_constraint_count=0,
-        #     ),
-        #     variables=Dict(
-        #         varname => miplearn.VariableFeatures(
-        #             category=vfeatures[:category],
-        #             user_features=PyCall.array2py(
-        #                 vfeatures[:user_features],
-        #             ),
-        #         )
-        #         for (varname, vfeatures) in features[:variables]
-        #     ),
-        #     constraints=Dict(
-        #         cname => miplearn.ConstraintFeatures(
-        #             category=cfeat[:category],
-        #             user_features=PyCall.array2py(
-        #                 cfeat[:user_features],
-        #             ),
-        #         )
-        #         for (cname, cfeat) in features[:constraints]
-        #     ),
-        # )
+        self.samples = []
     end
 
     function to_model(self)
         return self.model
     end
+
+    function get_instance_features(self)
+        return self.model.ext[:miplearn][:instance_features]
+    end
+
+    function get_variable_features(self, var_name)
+        model = self.model
+        v = variable_by_name(model, var_name)
+        return model.ext[:miplearn][:variable_features][v]
+    end
+
+    function get_variable_category(self, var_name)
+        model = self.model
+        v = variable_by_name(model, var_name)
+        return model.ext[:miplearn][:variable_categories][v]
+    end
+
+    function get_constraint_features(self, cname)
+        model = self.model
+        c = constraint_by_name(model, cname)
+        return model.ext[:miplearn][:constraint_features][c]
+    end
+
+    function get_constraint_category(self, cname)
+        model = self.model
+        c = constraint_by_name(model, cname)
+        return model.ext[:miplearn][:constraint_categories][c]
+    end
 end
+
+
+struct JuMPInstance
+    py::PyCall.PyObject
+end
+
+
+function JuMPInstance(model::Model)
+    return JuMPInstance(PyJuMPInstance(model))
+end
+
+
+export JuMPInstance

@@ -156,7 +156,7 @@ solver = LearningSolver(
 )
 ```
 
-### 2.2 Adjusting component aggresiveness
+### 2.2 Adjusting component aggressiveness
 
 ```julia
 using MIPLearn
