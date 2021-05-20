@@ -18,7 +18,7 @@ using Cbc
     @objective(model, Max, sum(x[i] * prices[i] for i in 1:n))
     @constraint(model, c1, sum(x[i] * weights[i] for i in 1:n) <= capacity)
 
-    # Add machine-learning information
+    # Add ML information to the model
     @feature(model, [5.0])
     @feature(c1, [1.0, 2.0, 3.0])
     @category(c1, "c1")
@@ -27,49 +27,30 @@ using Cbc
         @category(x[i], "type-$i")
     end
  
-    # Should store variable features
-    @test model.ext[:miplearn][:features][:variables] == Dict(
-        "x[1]" => Dict(
-            :user_features => [1.0, 5.0],
-            :category => "type-1",
+    # Should store ML information
+    @test model.ext[:miplearn][:variable_features][x[1]] == [1.0, 5.0]
+    @test model.ext[:miplearn][:variable_features][x[2]] == [2.0, 6.0]
+    @test model.ext[:miplearn][:variable_features][x[3]] == [3.0, 7.0]
+    @test model.ext[:miplearn][:variable_categories][x[1]] == "type-1"
+    @test model.ext[:miplearn][:variable_categories][x[2]] == "type-2"
+    @test model.ext[:miplearn][:variable_categories][x[3]] == "type-3"
+    @test model.ext[:miplearn][:constraint_features][c1] == [1.0, 2.0, 3.0]
+    @test model.ext[:miplearn][:constraint_categories][c1] == "c1"
+    @test model.ext[:miplearn][:instance_features] == [5.0]
 
-        ),
-        "x[2]" => Dict(
-            :user_features => [2.0, 6.0],
-            :category => "type-2",
-        ),
-        "x[3]" => Dict(
-            :user_features => [3.0, 7.0],
-            :category => "type-3",
-        ),
-    )
-
-    # Should store constraint features
-    @test model.ext[:miplearn][:features][:constraints] == Dict(
-        "c1" => Dict(
-            :user_features => [1.0, 2.0, 3.0],
-            :category => "c1",
-        )
-    )
-
-    # Should store instance features
-    @test model.ext[:miplearn][:features][:instance] == Dict(
-        :user_features => [5.0],
-    )
-
-    solver = LearningSolver(optimizer=Cbc.Optimizer)
+    # solver = LearningSolver(optimizer=Cbc.Optimizer)
     
-    # Should return correct stats
-    stats = solve!(solver, model)
-    @test stats["Lower bound"] == 11.0
+    # # Should return correct stats
+    # stats = solve!(solver, model)
+    # @test stats["Lower bound"] == 11.0
 
-    # Should add a sample to the training data
-    @test length(model.ext[:miplearn][:training_samples]) == 1
-    sample = model.ext[:miplearn][:training_samples][1]
-    @test sample["lower_bound"] == 11.0
-    @test sample["solution"]["x[1]"] == 1.0
+    # # Should add a sample to the training data
+    # @test length(model.ext[:miplearn][:training_samples]) == 1
+    # sample = model.ext[:miplearn][:training_samples][1]
+    # @test sample["lower_bound"] == 11.0
+    # @test sample["solution"]["x[1]"] == 1.0
 
-    fit!(solver, [model])
+    # fit!(solver, [model])
 
-    solve!(solver, model)
+    # solve!(solver, model)
 end

@@ -8,6 +8,6 @@ using MIPLearn
 MIPLearn.setup_logger()
 
 @testset "MIPLearn" begin
-    include("modeling/jump_solver_test.jl")
-    #include("modeling/learning_solver_test.jl")
+    # include("modeling/jump_solver_test.jl")
+    include("modeling/learning_solver_test.jl")
 end
