@@ -5,6 +5,7 @@
 function init_miplearn_ext(model)::Dict
     if :miplearn ∉ keys(model.ext)
         model.ext[:miplearn] = Dict{Symbol, Any}()
+        model.ext[:miplearn][:instance_features] = [0.0]
         model.ext[:miplearn][:variable_features] = Dict{VariableRef, Vector{Float64}}()
         model.ext[:miplearn][:variable_categories] = Dict{VariableRef, String}()
         model.ext[:miplearn][:constraint_features] = Dict{ConstraintRef, Vector{Float64}}()

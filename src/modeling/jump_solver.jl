@@ -316,49 +316,49 @@ function get_variables(
     values, rc = nothing, nothing
 
     # Variable names
-    names = Tuple(JuMP.name.(vars))
+    names = JuMP.name.(vars)
 
     # Primal values
     if !isempty(data.solution)
-        values = Tuple([data.solution[v] for v in vars])
+        values = [data.solution[v] for v in vars]
     end
 
     if with_static
         # Lower bounds
-        lb = Tuple(
+        lb = [
             JuMP.is_binary(v) ? 0.0 :
                 JuMP.has_lower_bound(v) ? JuMP.lower_bound(v) :
                     -Inf
             for v in vars
-        )
+        ]
 
         # Upper bounds
-        ub = Tuple(
+        ub = [
             JuMP.is_binary(v) ? 1.0 :
                 JuMP.has_upper_bound(v) ? JuMP.upper_bound(v) :
                     Inf
             for v in vars
-        )
+        ]
 
         # Variable types
-        types = Tuple(
+        types = [
             JuMP.is_binary(v) ? "B" :
                 JuMP.is_integer(v) ? "I" :
                     "C"
             for v in vars
-        )
+        ]
 
         # Objective function coefficients
         obj = objective_function(data.model)
-        obj_coeffs = Tuple(
+        obj_coeffs = [
             v ∈ keys(obj.terms) ? obj.terms[v] : 0.0
             for v in vars
-        )
+        ]
     end
 
-    rc = isempty(data.reduced_costs) ? nothing : Tuple(data.reduced_costs)
+    rc = isempty(data.reduced_costs) ? nothing : data.reduced_costs
 
-    return miplearn.features.VariableFeatures(
+    vf = miplearn.features.VariableFeatures(
         names=names,
         lower_bounds=lb,
         upper_bounds=ub,
@@ -367,6 +367,7 @@ function get_variables(
         reduced_costs=rc,
         values=values,
     )
+    return vf
 end
 
 
@@ -406,7 +407,7 @@ function get_constraints(
                 if ftype == JuMP.AffExpr
                     push!(
                         lhs,
-                        Tuple(
+                        [
                             (
                                 MOI.get(
                                     constr.model.moi_backend,
@@ -420,7 +421,7 @@ function get_constraints(
                                 MOI.ConstraintFunction(),
                                 constr.index,
                             ).terms
-                        )
+                        ]
                     )
                     if stype == MOI.EqualTo{Float64}
                         push!(senses, "=")
@@ -441,17 +442,12 @@ function get_constraints(
         end
     end
 
-    function to_tuple(x)
-        x !== nothing || return nothing
-        return Tuple(x)
-    end
-
     return miplearn.features.ConstraintFeatures(
-        names=to_tuple(names),
-        senses=to_tuple(senses),
-        lhs=to_tuple(lhs),
-        rhs=to_tuple(rhs),
-        dual_values=to_tuple(dual_values),
+        names=names,
+        senses=senses,
+        lhs=lhs,
+        rhs=rhs,
+        dual_values=dual_values,
     )
 end
 
@@ -471,23 +467,35 @@ end
         )
     end
 
-    add_constraints(self, cf) =
+    function add_constraints(self, cf)
+        lhs = cf.lhs
+        if lhs isa Matrix
+            # Undo incorrect automatic conversion performed by PyCall
+            lhs = [col[:] for col in eachcol(lhs)]
+        end
         add_constraints(
             self.data,
-            lhs=[[term for term in constr] for constr in cf.lhs],
-            rhs=[r for r in cf.rhs],
-            senses=[s for s in cf.senses],
-            names=[n for n in cf.names],
+            lhs=lhs,
+            rhs=cf.rhs,
+            senses=cf.senses,
+            names=cf.names,
         )
+    end
 
-    are_constraints_satisfied(self, cf; tol=1e-5) =
-        tuple(are_constraints_satisfied(
+    function are_constraints_satisfied(self, cf; tol=1e-5)
+        lhs = cf.lhs
+        if lhs isa Matrix
+            # Undo incorrect automatic conversion performed by PyCall
+            lhs = [col[:] for col in eachcol(lhs)]
+        end
+        return are_constraints_satisfied(
             self.data,
-            lhs=[[term for term in constr] for constr in cf.lhs],
-            rhs=[r for r in cf.rhs],
-            senses=[s for s in cf.senses],
+            lhs=lhs,
+            rhs=cf.rhs,
+            senses=cf.senses,
             tol=tol,
-        )...)
+        )
+    end
 
     build_test_instance_infeasible(self) =
         build_test_instance_infeasible()
