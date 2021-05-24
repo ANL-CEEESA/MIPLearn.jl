@@ -16,9 +16,9 @@ miplearn = pyimport("miplearn")
 
 include("utils/log.jl")
 include("utils/exceptions.jl")
-include("modeling/jump_instance.jl")
-include("modeling/jump_solver.jl")
-include("modeling/learning_solver.jl")
-include("modeling/macros.jl")
+include("instance/jump.jl")
+include("solvers/jump.jl")
+include("solvers/learning.jl")
+include("solvers/macros.jl")
 
 end # module

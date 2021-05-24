@@ -140,33 +140,4 @@ function load_jump_instance(filename::AbstractString)::JuMPInstance
 end
 
 
-struct FileInstance
-    filename::AbstractString
-    loaded::Union{Nothing,JuMPInstance}
-end
-
-
-function FileInstance(filename::AbstractString)::FileInstance
-    return FileInstance(
-        filename,
-        nothing,
-    )
-end
-
-
-function load!(instance::FileInstance)
-    instance.loaded = load_jump_instance(instance.filename)
-end
-
-
-function free!(instance::FileInstance)
-    instance.loaded = nothing
-end
-
-
-function flush!(instance::FileInstance)
-    save(instance.filename, instance.loaded)
-end
-
-
 export JuMPInstance, save, load_jump_instance
