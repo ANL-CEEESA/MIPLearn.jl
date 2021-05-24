@@ -108,13 +108,12 @@ end
 fit!(solver, training_instances)
 
 # Save trained solver to disk
-save!(solver, "solver.bin")
+save("solver.mls", solver)
 
 # Application restarts...
 
 # Load trained solver from disk
-solver = LearningSolver(Cbc.Optimizer)
-load!(solver, "solver.bin")
+solver = load("solver.mls")
 
 # Solve additional instances
 test_instances = [...]
@@ -138,6 +137,43 @@ fit!(solver, training_instances)
 # Solve test instances in parallel
 test_instances = [...]
 parallel_solve!(solver, test_instances)
+```
+
+### 1.6 Solving instances from disk
+
+```julia
+using MIPLearn
+using JuMP
+using Cbc
+
+# Create 600 problem instances and save them to files
+for i in 1:600
+    m = Model()
+    @variable(m, x, Bin)
+    @objective(m, Min, x)
+    @feature(x, [1.0])
+    
+    instance = JuMPInstance(m)
+    save("instance-$i.bin", instance)
+end
+
+# Initialize instances and solver
+training_instances = [FileInstance("instance-$i.bin") for i in 1:500]
+test_instances = [FileInstance("instance-$i.bin") for i in 501:600]
+solver = LearningSolver(Cbc.Optimizer)
+
+# Solve training instances
+for instance in training_instances
+    solve!(solver, instance)
+end
+
+# Train ML models
+fit!(solver, training_instances)
+
+# Solve test instances
+for instance in test_instances
+    solve!(solver, instance)
+end
 ```
 
 ## 2. Customization
