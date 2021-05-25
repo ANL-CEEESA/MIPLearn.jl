@@ -178,10 +178,12 @@ end
 In many situations, instances can be solved in parallel to accelerate the training process. MIPLearn.jl provides the method `parallel_solve!(solver, instances)` to easily achieve this.
 
 First, launch Julia in multi-process mode:
+
 ```
 julia --procs 4
 ```
-Then run the following script:
+
+Then call `parallel_solve!` as follows:
 
 ```julia
 @everywhere using MIPLearn
@@ -195,7 +197,7 @@ test_instances = [...]
 solver = LearningSolver(Cbc.Optimizer)
 
 # Solve training instances in parallel. The number of instances solved
-# simultaneously is the same as the `--procs` specified when running Julia.
+# simultaneously is the same as the `--procs` argument provided to Julia.
 parallel_solve!(solver, training_instances)
 
 # Train machine learning models
@@ -205,6 +207,7 @@ fit!(solver, training_instances)
 parallel_solve!(solver, test_instances)
 ```
 
+**NOTE:** Only `FileInstance` instances are currently supported.
 
 ## 2. Customization
 
