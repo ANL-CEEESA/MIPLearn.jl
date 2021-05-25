@@ -56,5 +56,16 @@ using Gurobi
         solver = LearningSolver(Gurobi.Optimizer)
         instance = JuMPInstance(model)
         stats = solve!(solver, instance)
+        @test stats["mip_lower_bound"] == 2.0
+    end
+
+    @testset "Save and load" begin
+        solver = LearningSolver(Gurobi.Optimizer)
+        solver.py.components = "Placeholder"
+        filename = tempname()
+        save(filename, solver)
+        @test isfile(filename)
+        loaded = load_solver(filename)
+        @test loaded.py.components == "Placeholder"
     end
 end
