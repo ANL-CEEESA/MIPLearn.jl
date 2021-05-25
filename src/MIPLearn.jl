@@ -17,5 +17,20 @@ include("instance/file.jl")
 include("solvers/jump.jl")
 include("solvers/learning.jl")
 include("solvers/macros.jl")
+include("utils/benchmark.jl")
+
+DynamicLazyConstraintsComponent = miplearn.DynamicLazyConstraintsComponent
+UserCutsComponent = miplearn.UserCutsComponent
+ObjectiveValueComponent = miplearn.ObjectiveValueComponent
+PrimalSolutionComponent = miplearn.PrimalSolutionComponent
+StaticLazyConstraintsComponent = miplearn.StaticLazyConstraintsComponent
+MinPrecisionThreshold = miplearn.MinPrecisionThreshold
+
+export DynamicLazyConstraintsComponent,
+       UserCutsComponent,
+       ObjectiveValueComponent,
+       PrimalSolutionComponent,
+       StaticLazyConstraintsComponent,
+       MinPrecisionThreshold
 
 end # module

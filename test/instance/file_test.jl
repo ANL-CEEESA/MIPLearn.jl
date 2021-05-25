@@ -6,12 +6,10 @@ using JuMP
 using MIPLearn
 using Gurobi
 
+
 @testset "FileInstance" begin
     @testset "solve" begin
-        model = Model()
-        @variable(model, x, Bin)
-        @variable(model, y, Bin)
-        @objective(model, Max, x + y)
+        model = build_knapsack_model()
         instance = JuMPInstance(model)
         filename = tempname()
         save(filename, instance)

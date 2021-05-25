@@ -2,18 +2,13 @@
 #  Copyright (C) 2020-2021, UChicago Argonne, LLC. All rights reserved.
 #  Released under the modified BSD license. See COPYING.md for more details.
 
-@testset "JuMPInstance" begin
-    @testset "save and load" begin
-        # Create basic model
-        model = Model()
-        @variable(model, x, Bin)
-        @variable(model, y, Bin)
-        @objective(model, Max, x + y)
-        @feature(x, [1.0])
-        @category(x, "cat1")
-        @feature(model, [5.0])
+using MIPLearn
 
-        # Solve
+
+@testset "JuMPInstance" begin
+    @testset "Save and load" begin
+        # Build instance and solve
+        model = model = build_knapsack_model()
         instance = JuMPInstance(model)
         solver = LearningSolver(Gurobi.Optimizer)
         stats = solve!(solver, instance)

@@ -11,10 +11,21 @@ struct LearningSolver
 end
 
 
-function LearningSolver(optimizer_factory)::LearningSolver
-    py = miplearn.LearningSolver(solver=JuMPSolver(optimizer_factory))
+function LearningSolver(
+    optimizer_factory;
+    components = nothing,
+    mode::AbstractString = "exact",
+    simulate_perfect::Bool = false,
+    solve_lp::Bool = true,
+)::LearningSolver
     return LearningSolver(
-        py,
+        miplearn.LearningSolver(
+            solver=JuMPSolver(optimizer_factory),
+            mode=mode,
+            solve_lp=solve_lp,
+            simulate_perfect=simulate_perfect,
+            components=components,
+        ),
         optimizer_factory,
     )
 end
@@ -36,7 +47,6 @@ end
 
 function parallel_solve!(solver::LearningSolver, instances::Vector{FileInstance})
     filenames = [instance.filename for instance in instances]
-    optimizer_factory = solver.optimizer_factory
     solver_filename = tempname()
     save(solver_filename, solver)
     @sync @distributed for filename in filenames
