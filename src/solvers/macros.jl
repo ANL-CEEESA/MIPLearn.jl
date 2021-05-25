@@ -62,3 +62,7 @@ macro category(obj, category)
         set_category!($(esc(obj)), $(esc(category)))
     end
 end
+
+
+export @feature,
+       @category

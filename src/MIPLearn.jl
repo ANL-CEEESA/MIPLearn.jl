@@ -6,20 +6,16 @@ __precompile__(false)
 module MIPLearn
 
 using PyCall
-
-export JuMPInstance
-export LearningSolver
-export @feature
-export @category
-
-miplearn = pyimport("miplearn")
+global miplearn = pyimport("miplearn")
+global traceback = pyimport("traceback")
 
 include("utils/log.jl")
 include("utils/exceptions.jl")
+include("instance/abstract.jl")
+include("instance/jump.jl")
+include("instance/file.jl")
 include("solvers/jump.jl")
 include("solvers/learning.jl")
 include("solvers/macros.jl")
-include("instance/jump.jl")
-include("instance/file.jl")
 
 end # module

@@ -7,7 +7,7 @@ using MIPLearn
 using Gurobi
 
 @testset "LearningSolver" begin
-    @testset "model with annotations" begin
+    @testset "Model with annotations" begin
         # Create standard JuMP model
         weights = [1.0, 2.0, 3.0]
         prices = [5.0, 6.0, 7.0]
@@ -48,7 +48,7 @@ using Gurobi
         solve!(solver, instance)
     end
 
-    @testset "model without annotations" begin
+    @testset "Model without annotations" begin
         model = Model()
         @variable(model, x, Bin)
         @variable(model, y, Bin)
@@ -57,5 +57,4 @@ using Gurobi
         instance = JuMPInstance(model)
         stats = solve!(solver, instance)
     end
-
 end

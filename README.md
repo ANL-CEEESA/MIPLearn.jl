@@ -108,12 +108,12 @@ end
 fit!(solver, training_instances)
 
 # Save trained solver to disk
-save("solver.mls", solver)
+save("solver.bin", solver)
 
 # Application restarts...
 
 # Load trained solver from disk
-solver = load("solver.mls")
+solver = load_solver("solver.bin")
 
 # Solve additional instances
 test_instances = [...]
@@ -123,46 +123,43 @@ end
 
 ```
 
-### 1.5 Solving training instances in parallel
-```julia
-using MIPLearn
-using Cbc
+### 1.5 Solving instances from disk
 
-# Solve training instances in parallel
-training_instances = [...]
-solver = LearningSolver(Cbc.Optimizer)
-parallel_solve!(solver, training_instances, n_jobs=4)
-fit!(solver, training_instances)
+In all examples above, we have assumed that instances are available as `JuMPInstance` objects, stored in memory. When problem instances are very large, or when there is a large number of problem instances, this approach may require an excessive amount of memory. To reduce memory requirements, MIPLearn.jl can also operate on instances that are stored on disk, through the `FileInstance` class, as the next example illustrates.
 
-# Solve test instances in parallel
-test_instances = [...]
-parallel_solve!(solver, test_instances)
-```
-
-### 1.6 Solving instances from disk
 
 ```julia
 using MIPLearn
 using JuMP
 using Cbc
 
-# Create 600 problem instances and save them to files
+# Create a large number of problem instances
 for i in 1:600
-    m = Model()
-    @variable(m, x, Bin)
-    @objective(m, Min, x)
-    @feature(x, [1.0])
+
+    # Build JuMP model
+    model = Model()
+    @variable(...)
+    @objective(...)
+    @constraint(...)
+
+    # Add ML features and categories
+    @feature(...)
+    @category(...)
     
+    # Save instances to a file
     instance = JuMPInstance(m)
     save("instance-$i.bin", instance)
 end
 
-# Initialize instances and solver
+# Initialize training and test instances
 training_instances = [FileInstance("instance-$i.bin") for i in 1:500]
 test_instances = [FileInstance("instance-$i.bin") for i in 501:600]
+
+# Initialize solver
 solver = LearningSolver(Cbc.Optimizer)
 
-# Solve training instances
+# Solve training instances. Files are modified in-place, and at most one
+# file is loaded to memory at a time.
 for instance in training_instances
     solve!(solver, instance)
 end
@@ -175,6 +172,39 @@ for instance in test_instances
     solve!(solver, instance)
 end
 ```
+
+### 1.6 Solving training instances in parallel
+
+In many situations, instances can be solved in parallel to accelerate the training process. MIPLearn.jl provides the method `parallel_solve!(solver, instances)` to easily achieve this.
+
+First, launch Julia in multi-process mode:
+```
+julia --procs 4
+```
+Then run the following script:
+
+```julia
+@everywhere using MIPLearn
+@everywhere using Cbc
+
+# Initialize training and test instances
+training_instances = [...]
+test_instances = [...]
+
+# Initialize the solver
+solver = LearningSolver(Cbc.Optimizer)
+
+# Solve training instances in parallel. The number of instances solved
+# simultaneously is the same as the `--procs` specified when running Julia.
+parallel_solve!(solver, training_instances)
+
+# Train machine learning models
+fit!(solver, training_instances)
+
+# Solve test instances in parallel
+parallel_solve!(solver, test_instances)
+```
+
 
 ## 2. Customization
 

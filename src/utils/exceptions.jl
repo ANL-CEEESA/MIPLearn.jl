@@ -3,7 +3,6 @@
 #  Released under the modified BSD license. See COPYING.md for more details.
 
 using PyCall
-traceback = pyimport("traceback")
 
 
 macro python_call(expr)

@@ -55,12 +55,16 @@ end
 
 struct FileInstance <: Instance
     py::PyCall.PyObject
+    filename::AbstractString
 end
 
 
 function FileInstance(filename)::FileInstance
     filename isa AbstractString || error("filename should be a string. Found $(typeof(filename)) instead.")
-    return FileInstance(PyFileInstance(filename))
+    return FileInstance(
+        PyFileInstance(filename),
+        filename,
+    )
 end
 
 
