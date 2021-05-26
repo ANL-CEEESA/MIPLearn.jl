@@ -22,7 +22,7 @@
 To use MIPLearn.jl, the first step is to [install the Julia programming language on your machine](https://julialang.org/). After Julia is installed, launch the Julia console, type `]` to switch to package manager mode, then run:
 
 ```
-(@v1.6) pkg> add MIPLearn@0.2
+(@v1.6) pkg> add https://github.com/ANL-CEEESA/MIPLearn.jl.git
 ```
 
 This command should also automatically install all the required Python dependencies. To test that the package has been correctly installed, run (in package manager mode):
@@ -93,6 +93,7 @@ end
 ```
 
 ### 1.4 Saving and loading solver state
+
 ```julia
 using MIPLearn
 using Cbc
@@ -240,14 +241,6 @@ solver = LearningSolver(
 )
 ```
 
-### 2.3 Evaluating component performance
-
-TODO
-
-### 2.4 Using customized ML classifiers and regressors
-
-TODO
-
 ## 3. Acknowledgments
 * Based upon work supported by **Laboratory Directed Research and Development** (LDRD) funding from Argonne National Laboratory, provided by the Director, Office of Science, of the U.S. Department of Energy under Contract No. DE-AC02-06CH11357.
 * Based upon work supported by the **U.S. Department of Energy Advanced Grid Modeling Program** under Grant DE-OE0000875.
@@ -266,4 +259,3 @@ If you use MIPLearn in the field of power systems optimization, we kindly reques
 
 
 Released under the modified BSD license. See `LICENSE` for more details.
-
