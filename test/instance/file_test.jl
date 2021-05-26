@@ -4,7 +4,7 @@
 
 using JuMP
 using MIPLearn
-using Gurobi
+using Cbc
 
 
 @testset "FileInstance" begin
@@ -15,7 +15,7 @@ using Gurobi
         save(filename, instance)
 
         file_instance = FileInstance(filename)
-        solver = LearningSolver(Gurobi.Optimizer)
+        solver = LearningSolver(Cbc.Optimizer)
         solve!(solver, file_instance)
 
         loaded = load_instance(filename)

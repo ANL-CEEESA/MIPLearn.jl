@@ -2,19 +2,19 @@
 #  Copyright (C) 2020-2021, UChicago Argonne, LLC. All rights reserved.
 #  Released under the modified BSD license. See COPYING.md for more details.
 
+using Cbc
 using CSV
 using DataFrames
-using Gurobi
 
 
 @testset "BenchmarkRunner" begin
-    # Initialie instances and generate training data
+    # Initialize instances and generate training data
     instances = [
         build_knapsack_file_instance(),
         build_knapsack_file_instance(),
     ]
     parallel_solve!(
-        LearningSolver(Gurobi.Optimizer),
+        LearningSolver(Cbc.Optimizer),
         instances,
     )
 
@@ -22,14 +22,14 @@ using Gurobi
     benchmark = BenchmarkRunner(
         solvers=Dict(
             "baseline" => LearningSolver(
-                Gurobi.Optimizer,
+                Cbc.Optimizer,
                 components=[],
             ),
             "ml-exact" => LearningSolver(
-                Gurobi.Optimizer,
+                Cbc.Optimizer,
             ),
             "ml-heur" => LearningSolver(
-                Gurobi.Optimizer,
+                Cbc.Optimizer,
                 mode="heuristic",
             ),
         ),

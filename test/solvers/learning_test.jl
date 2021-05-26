@@ -2,14 +2,14 @@
 #  Copyright (C) 2020-2021, UChicago Argonne, LLC. All rights reserved.
 #  Released under the modified BSD license. See COPYING.md for more details.
 
+using Cbc
 using JuMP
 using MIPLearn
-using Gurobi
 
 @testset "LearningSolver" begin
     @testset "Model with annotations" begin
         model = build_knapsack_model()
-        solver = LearningSolver(Gurobi.Optimizer)
+        solver = LearningSolver(Cbc.Optimizer)
         instance = JuMPInstance(model)
         stats = solve!(solver, instance)
         @test stats["mip_lower_bound"] == 11.0
@@ -20,14 +20,14 @@ using Gurobi
 
     @testset "Model without annotations" begin
         model = build_knapsack_model()
-        solver = LearningSolver(Gurobi.Optimizer)
+        solver = LearningSolver(Cbc.Optimizer)
         instance = JuMPInstance(model)
         stats = solve!(solver, instance)
         @test stats["mip_lower_bound"] == 11.0
     end
 
     @testset "Save and load" begin
-        solver = LearningSolver(Gurobi.Optimizer)
+        solver = LearningSolver(Cbc.Optimizer)
         solver.py.components = "Placeholder"
         filename = tempname()
         save(filename, solver)
@@ -38,7 +38,7 @@ using Gurobi
 
     @testset "Discard output" begin
         instance = build_knapsack_file_instance()
-        solver = LearningSolver(Gurobi.Optimizer)
+        solver = LearningSolver(Cbc.Optimizer)
         solve!(solver, instance, discard_output=true)
         loaded = load_instance(instance.filename)
         @test length(loaded.py.samples) == 0

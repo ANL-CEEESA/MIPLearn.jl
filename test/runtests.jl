@@ -8,9 +8,9 @@ using MIPLearn
 MIPLearn.setup_logger()
 
 @testset "MIPLearn" begin
-    # include("fixtures/knapsack.jl")
+    include("fixtures/knapsack.jl")
     include("solvers/jump_test.jl")
-    # include("solvers/learning_test.jl")
-    # include("instance/file_test.jl")
-    # include("utils/benchmark_test.jl")
+    include("solvers/learning_test.jl")
+    include("instance/file_test.jl")
+    include("utils/benchmark_test.jl")
 end
