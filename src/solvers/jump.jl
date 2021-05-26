@@ -224,9 +224,10 @@ end
 function solve_lp(data::JuMPSolverData; tee::Bool=false)
     model, bin_vars = data.model, data.bin_vars
     for var in bin_vars
-        JuMP.unset_binary(var)
-        JuMP.set_upper_bound(var, 1.0)
-        JuMP.set_lower_bound(var, 0.0)
+        ~is_fixed(var) || continue
+        unset_binary(var)
+        set_upper_bound(var, 1.0)
+        set_lower_bound(var, 0.0)
     end
     wallclock_time = @elapsed begin
         log = _optimize_and_capture_output!(model, tee=tee)
@@ -236,10 +237,11 @@ function solve_lp(data::JuMPSolverData; tee::Bool=false)
         obj_value = nothing
     else
         _update_solution!(data)
-        obj_value = JuMP.objective_value(model)
+        obj_value = objective_value(model)
     end
     for var in bin_vars
-        JuMP.set_binary(var)
+        ~is_fixed(var) || continue
+        set_binary(var)
     end
     return miplearn.solvers.internal.LPSolveStats(
         lp_value=obj_value,

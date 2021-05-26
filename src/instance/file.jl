@@ -36,7 +36,7 @@
 
     function load(self)
         if self.loaded === nothing
-            self.loaded = load_jump_instance(self.filename)
+            self.loaded = load_instance(self.filename)
             self.samples = self.loaded.py.samples
         end
     end

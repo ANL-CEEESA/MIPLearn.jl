@@ -26,9 +26,11 @@ function parallel_solve!(
     n_trials::Int = 3,
 )::Nothing
     for (solver_name, solver) in runner.solvers
+        @info "Benchmarking: $solver_name"
         for i in 1:n_trials
             for instance in instances
-                stats = solve!(solver, instance)
+                stats = solve!(solver, instance, discard_output=true)
+                instance.py.free()
                 stats["Solver"] = solver_name
                 stats = Dict(k => isnothing(v) ? missing : v for (k, v) in stats)
                 if runner.results === nothing

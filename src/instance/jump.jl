@@ -111,7 +111,7 @@ function _check_miplearn_version(file)
 end
 
 
-function load_jump_instance(filename::AbstractString)::JuMPInstance
+function load_instance(filename::AbstractString)::JuMPInstance
     @info "Reading: $filename"
     instance = nothing
     time = @elapsed begin
@@ -155,4 +155,4 @@ function load_jump_instance(filename::AbstractString)::JuMPInstance
 end
 
 
-export JuMPInstance, save, load_jump_instance
+export JuMPInstance, save, load_instance

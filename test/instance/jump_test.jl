@@ -20,7 +20,7 @@ using MIPLearn
         @test isfile(filename)
 
         # Read model from file
-        loaded = load_jump_instance(filename)
+        loaded = load_instance(filename)
         x = variable_by_name(loaded.model, "x")
         @test loaded.model.ext[:miplearn][:variable_features][x] == [1.0]
         @test loaded.model.ext[:miplearn][:variable_categories][x] == "cat1"

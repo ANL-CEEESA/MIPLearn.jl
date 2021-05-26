@@ -35,8 +35,13 @@ function solve!(
     solver::LearningSolver,
     instance::Instance;
     tee::Bool = false,
+    discard_output::Bool = false,
 )
-    return @python_call solver.py.solve(instance.py, tee=tee)
+    return @python_call solver.py.solve(
+        instance.py,
+        tee=tee,
+        discard_output=discard_output,
+    )
 end
 
 

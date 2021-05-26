@@ -35,4 +35,12 @@ using Gurobi
         loaded = load_solver(filename)
         @test loaded.py.components == "Placeholder"
     end
+
+    @testset "Discard output" begin
+        instance = build_knapsack_file_instance()
+        solver = LearningSolver(Gurobi.Optimizer)
+        solve!(solver, instance, discard_output=true)
+        loaded = load_instance(instance.filename)
+        @test length(loaded.py.samples) == 0
+    end
 end

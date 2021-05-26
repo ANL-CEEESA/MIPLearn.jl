@@ -18,7 +18,7 @@ using Gurobi
         solver = LearningSolver(Gurobi.Optimizer)
         solve!(solver, file_instance)
 
-        loaded = load_jump_instance(filename)
+        loaded = load_instance(filename)
         @test length(loaded.py.samples) == 1
     end    
 end
