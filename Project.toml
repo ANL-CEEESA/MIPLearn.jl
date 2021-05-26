@@ -5,6 +5,8 @@ version = "0.2.0"
 
 [deps]
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
+Cbc = "9961bab8-2fa3-5c5a-9d89-47fab24efd76"
+Clp = "e2554f3b-3117-50c0-817c-e040a3ddf72d"
 Conda = "8f4d0f93-b110-5947-807f-2305c1781a2d"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"

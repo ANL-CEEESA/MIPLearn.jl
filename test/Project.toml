@@ -1,11 +1,10 @@
-#  MIPLearn: Extensible Framework for Learning-Enhanced Mixed-Integer Optimization
-#  Copyright (C) 2020-2021, UChicago Argonne, LLC. All rights reserved.
-#  Released under the modified BSD license. See COPYING.md for more details.
-
 [deps]
+CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
 Cbc = "9961bab8-2fa3-5c5a-9d89-47fab24efd76"
-Gurobi = "2e9cd046-0924-5485-92f1-d5272153d98b"
+Clp = "e2554f3b-3117-50c0-817c-e040a3ddf72d"
 Conda = "8f4d0f93-b110-5947-807f-2305c1781a2d"
+DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+Gurobi = "2e9cd046-0924-5485-92f1-d5272153d98b"
 JSON2 = "2535ab7d-5cd8-5a07-80ac-9b1792aadce3"
 JuMP = "4076af6c-e467-56ae-b986-b466b2749572"
 MIPLearn = "2b1277c3-b477-4c49-a15e-7ba350325c68"
@@ -15,5 +14,3 @@ Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 PyCall = "438e738f-606a-5dbb-bf0a-cddfbfd45ab0"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 TimerOutputs = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
-CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
-DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"

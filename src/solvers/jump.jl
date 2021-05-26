@@ -2,10 +2,12 @@
 #  Copyright (C) 2020-2021, UChicago Argonne, LLC. All rights reserved.
 #  Released under the modified BSD license. See COPYING.md for more details.
 
+using Cbc
+using Clp
 using JuMP
 using MathOptInterface
-const MOI = MathOptInterface
 using TimerOutputs
+const MOI = MathOptInterface
 
 
 mutable struct JuMPSolverData
@@ -183,8 +185,9 @@ function solve(
     wallclock_time = 0
     log = ""
     while true
-        log *= _optimize_and_capture_output!(model, tee=tee)
-        wallclock_time += JuMP.solve_time(model)
+        wallclock_time += @elapsed begin
+            log *= _optimize_and_capture_output!(model, tee=tee)
+        end
         if iteration_cb !== nothing
             iteration_cb() || break
         else
@@ -229,6 +232,13 @@ function solve_lp(data::JuMPSolverData; tee::Bool=false)
         set_upper_bound(var, 1.0)
         set_lower_bound(var, 0.0)
     end
+    # If the optimizer is Cbc, we need to replace it by Clp,
+    # otherwise dual values are not available.
+    # https://github.com/jump-dev/Cbc.jl/issues/50
+    is_cbc = (data.optimizer_factory == Cbc.Optimizer)
+    if is_cbc
+        set_optimizer(model, Clp.Optimizer)
+    end
     wallclock_time = @elapsed begin
         log = _optimize_and_capture_output!(model, tee=tee)
     end
@@ -238,6 +248,9 @@ function solve_lp(data::JuMPSolverData; tee::Bool=false)
     else
         _update_solution!(data)
         obj_value = objective_value(model)
+    end
+    if is_cbc
+        set_optimizer(model, data.optimizer_factory)
     end
     for var in bin_vars
         ~is_fixed(var) || continue
