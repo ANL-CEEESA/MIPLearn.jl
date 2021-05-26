@@ -3,11 +3,15 @@
 #  Released under the modified BSD license. See COPYING.md for more details.
 
 using Cbc
-using Gurobi
 using JuMP
 using MIPLearn
 using PyCall
 using Test
+
+const is_gurobi_available = ("GUROBI_HOME" in keys(ENV))
+if is_gurobi_available
+    using Gurobi
+end
 
 miplearn_tests = pyimport("miplearn.solvers.tests")
 traceback = pyimport("traceback")
@@ -22,7 +26,7 @@ end
     @testset "Cbc" begin
         _test_solver(Cbc.Optimizer)
     end
-    if "GUROBI_HOME" in keys(ENV)
+    if is_gurobi_available
         @testset "Gurobi" begin
             _test_solver(Gurobi.Optimizer)
         end
