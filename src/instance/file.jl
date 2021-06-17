@@ -3,55 +3,57 @@
 #  Released under the modified BSD license. See COPYING.md for more details.
 
 
-@pydef mutable struct PyFileInstance <: miplearn.Instance
-    function __init__(self, filename)
-        self.filename = filename
-        self.loaded = nothing
-        self.samples = nothing
-    end
+function __init_PyFileInstance__()
+    @pydef mutable struct Class <: miplearn.Instance
+        function __init__(self, filename)
+            self.filename = filename
+            self.loaded = nothing
+            self.samples = nothing
+        end
 
-    function to_model(self)
-        return self.loaded.py.to_model()
-    end
+        function to_model(self)
+            return self.loaded.py.to_model()
+        end
 
-    function get_instance_features(self)
-        return self.loaded.py.get_instance_features()
-    end
+        function get_instance_features(self)
+            return self.loaded.py.get_instance_features()
+        end
 
-    function get_variable_features(self, var_name)
-        return self.loaded.py.get_variable_features(var_name)
-    end
+        function get_variable_features(self, var_name)
+            return self.loaded.py.get_variable_features(var_name)
+        end
 
-    function get_variable_category(self, var_name)
-        return self.loaded.py.get_variable_category(var_name)
-    end
+        function get_variable_category(self, var_name)
+            return self.loaded.py.get_variable_category(var_name)
+        end
 
-    function get_constraint_features(self, cname)
-        return self.loaded.py.get_constraint_features(cname)
-    end
+        function get_constraint_features(self, cname)
+            return self.loaded.py.get_constraint_features(cname)
+        end
 
-    function get_constraint_category(self, cname)
-        return self.loaded.py.get_constraint_category(cname)
-    end
+        function get_constraint_category(self, cname)
+            return self.loaded.py.get_constraint_category(cname)
+        end
 
-    function load(self)
-        if self.loaded === nothing
-            self.loaded = load_instance(self.filename)
-            self.samples = self.loaded.py.samples
+        function load(self)
+            if self.loaded === nothing
+                self.loaded = load_instance(self.filename)
+                self.samples = self.loaded.py.samples
+            end
+        end
+
+        function free(self)
+            self.loaded = nothing
+            self.samples = nothing
+        end
+
+        function flush(self)
+            self.loaded.py.samples = self.samples
+            save(self.filename, self.loaded)
         end
     end
-
-    function free(self)
-        self.loaded = nothing
-        self.samples = nothing
-    end
-
-    function flush(self)
-        self.loaded.py.samples = self.samples
-        save(self.filename, self.loaded)
-    end
+    copy!(PyFileInstance, Class)
 end
-
 
 struct FileInstance <: Instance
     py::PyCall.PyObject

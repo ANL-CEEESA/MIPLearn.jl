@@ -467,144 +467,147 @@ function get_constraints(
 end
 
 
-@pydef mutable struct JuMPSolver <: miplearn.solvers.internal.InternalSolver
-    function __init__(self, optimizer_factory)
-        self.data = JuMPSolverData(
-            optimizer_factory,
-            Dict(),  # varname_to_var
-            Dict(),  # cname_to_constr
-            nothing,  # instance
-            nothing,  # model
-            [],  # bin_vars
-            Dict(),  # solution
-            [],  # reduced_costs
-            Dict(),  # dual_values
-        )
-    end
-
-    function add_constraints(self, cf)
-        lhs = cf.lhs
-        if lhs isa Matrix
-            # Undo incorrect automatic conversion performed by PyCall
-            lhs = [col[:] for col in eachcol(lhs)]
+function __init_JuMPSolver__()
+    @pydef mutable struct Class <: miplearn.solvers.internal.InternalSolver
+        function __init__(self, optimizer_factory)
+            self.data = JuMPSolverData(
+                optimizer_factory,
+                Dict(),  # varname_to_var
+                Dict(),  # cname_to_constr
+                nothing,  # instance
+                nothing,  # model
+                [],  # bin_vars
+                Dict(),  # solution
+                [],  # reduced_costs
+                Dict(),  # dual_values
+            )
         end
-        add_constraints(
-            self.data,
-            lhs=lhs,
-            rhs=cf.rhs,
-            senses=cf.senses,
-            names=cf.names,
-        )
-    end
 
-    function are_constraints_satisfied(self, cf; tol=1e-5)
-        lhs = cf.lhs
-        if lhs isa Matrix
-            # Undo incorrect automatic conversion performed by PyCall
-            lhs = [col[:] for col in eachcol(lhs)]
+        function add_constraints(self, cf)
+            lhs = cf.lhs
+            if lhs isa Matrix
+                # Undo incorrect automatic conversion performed by PyCall
+                lhs = [col[:] for col in eachcol(lhs)]
+            end
+            add_constraints(
+                self.data,
+                lhs=lhs,
+                rhs=cf.rhs,
+                senses=cf.senses,
+                names=cf.names,
+            )
         end
-        return are_constraints_satisfied(
+
+        function are_constraints_satisfied(self, cf; tol=1e-5)
+            lhs = cf.lhs
+            if lhs isa Matrix
+                # Undo incorrect automatic conversion performed by PyCall
+                lhs = [col[:] for col in eachcol(lhs)]
+            end
+            return are_constraints_satisfied(
+                self.data,
+                lhs=lhs,
+                rhs=cf.rhs,
+                senses=cf.senses,
+                tol=tol,
+            )
+        end
+
+        build_test_instance_infeasible(self) =
+            build_test_instance_infeasible()
+
+        build_test_instance_knapsack(self) =
+            build_test_instance_knapsack()
+        
+        clone(self) = JuMPSolver(self.data.optimizer_factory)
+
+        fix(self, solution) =
+            fix!(self.data, solution)
+        
+        get_solution(self) =
+            isempty(self.data.solution) ? nothing : self.data.solution
+
+        get_constraints(
+            self;
+            with_static=true,
+            with_sa=true,
+            with_lhs=true,
+        ) = get_constraints(
             self.data,
-            lhs=lhs,
-            rhs=cf.rhs,
-            senses=cf.senses,
-            tol=tol,
+            with_static=with_static,
         )
+
+        get_constraint_attrs(self) = [
+            # "basis_status",
+            "categories",
+            "dual_values",
+            "lazy",
+            "lhs",
+            "names",
+            "rhs",
+            # "sa_rhs_down",
+            # "sa_rhs_up",
+            "senses",
+            # "slacks",
+            "user_features",
+        ]
+        
+        get_variables(
+            self;
+            with_static=true,
+            with_sa=true,
+        ) = get_variables(self.data; with_static=with_static)
+        
+        get_variable_attrs(self) =  [
+            "names",
+            # "basis_status",
+            "categories",
+            "lower_bounds",
+            "obj_coeffs",
+            "reduced_costs",
+            # "sa_lb_down",
+            # "sa_lb_up",
+            # "sa_obj_down",
+            # "sa_obj_up",
+            # "sa_ub_down",
+            # "sa_ub_up",
+            "types",
+            "upper_bounds",
+            "user_features",
+            "values",
+        ]
+
+        is_infeasible(self) =
+            is_infeasible(self.data)
+
+        remove_constraints(self, names) =
+            remove_constraints(
+                self.data,
+                [n for n in names],
+            )
+
+        set_instance(self, instance, model=nothing) =
+            set_instance!(self.data, instance, model=model)
+        
+        set_warm_start(self, solution) =
+            set_warm_start!(self.data, solution)
+
+        solve(
+            self;
+            tee=false,
+            iteration_cb=nothing,
+            lazy_cb=nothing,
+            user_cut_cb=nothing,
+        ) = solve(
+            self.data,
+            tee=tee,
+            iteration_cb=iteration_cb,
+        )
+        
+        solve_lp(self; tee=false) =
+            solve_lp(self.data, tee=tee)
     end
-
-    build_test_instance_infeasible(self) =
-        build_test_instance_infeasible()
-
-    build_test_instance_knapsack(self) =
-        build_test_instance_knapsack()
-    
-    clone(self) = JuMPSolver(self.data.optimizer_factory)
-
-    fix(self, solution) =
-        fix!(self.data, solution)
-    
-    get_solution(self) =
-        isempty(self.data.solution) ? nothing : self.data.solution
-
-    get_constraints(
-        self;
-        with_static=true,
-        with_sa=true,
-        with_lhs=true,
-    ) = get_constraints(
-        self.data,
-        with_static=with_static,
-    )
-
-    get_constraint_attrs(self) = [
-        # "basis_status",
-        "categories",
-        "dual_values",
-        "lazy",
-        "lhs",
-        "names",
-        "rhs",
-        # "sa_rhs_down",
-        # "sa_rhs_up",
-        "senses",
-        # "slacks",
-        "user_features",
-    ]
-    
-    get_variables(
-        self;
-        with_static=true,
-        with_sa=true,
-    ) = get_variables(self.data; with_static=with_static)
-    
-    get_variable_attrs(self) =  [
-        "names",
-        # "basis_status",
-        "categories",
-        "lower_bounds",
-        "obj_coeffs",
-        "reduced_costs",
-        # "sa_lb_down",
-        # "sa_lb_up",
-        # "sa_obj_down",
-        # "sa_obj_up",
-        # "sa_ub_down",
-        # "sa_ub_up",
-        "types",
-        "upper_bounds",
-        "user_features",
-        "values",
-    ]
-
-    is_infeasible(self) =
-        is_infeasible(self.data)
-
-    remove_constraints(self, names) =
-        remove_constraints(
-            self.data,
-            [n for n in names],
-        )
-
-    set_instance(self, instance, model=nothing) =
-        set_instance!(self.data, instance, model=model)
-    
-    set_warm_start(self, solution) =
-        set_warm_start!(self.data, solution)
-
-    solve(
-        self;
-        tee=false,
-        iteration_cb=nothing,
-        lazy_cb=nothing,
-        user_cut_cb=nothing,
-    ) = solve(
-        self.data,
-        tee=tee,
-        iteration_cb=iteration_cb,
-    )
-    
-    solve_lp(self; tee=false) =
-        solve_lp(self.data, tee=tee)
+    copy!(JuMPSolver, Class)
 end
 
 
