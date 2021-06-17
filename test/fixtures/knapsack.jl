@@ -28,14 +28,14 @@ function build_knapsack_model()
     end
 
     # Should store ML information
-    @test model.ext[:miplearn][:variable_features][x[1]] == [1.0, 5.0]
-    @test model.ext[:miplearn][:variable_features][x[2]] == [2.0, 6.0]
-    @test model.ext[:miplearn][:variable_features][x[3]] == [3.0, 7.0]
-    @test model.ext[:miplearn][:variable_categories][x[1]] == "type-1"
-    @test model.ext[:miplearn][:variable_categories][x[2]] == "type-2"
-    @test model.ext[:miplearn][:variable_categories][x[3]] == "type-3"
-    @test model.ext[:miplearn][:constraint_features][c1] == [1.0, 2.0, 3.0]
-    @test model.ext[:miplearn][:constraint_categories][c1] == "c1"
+    @test model.ext[:miplearn][:variable_features]["x[1]"] == [1.0, 5.0]
+    @test model.ext[:miplearn][:variable_features]["x[2]"] == [2.0, 6.0]
+    @test model.ext[:miplearn][:variable_features]["x[3]"] == [3.0, 7.0]
+    @test model.ext[:miplearn][:variable_categories]["x[1]"] == "type-1"
+    @test model.ext[:miplearn][:variable_categories]["x[2]"] == "type-2"
+    @test model.ext[:miplearn][:variable_categories]["x[3]"] == "type-3"
+    @test model.ext[:miplearn][:constraint_features]["c1"] == [1.0, 2.0, 3.0]
+    @test model.ext[:miplearn][:constraint_categories]["c1"] == "c1"
     @test model.ext[:miplearn][:instance_features] == [5.0]    
 
     return model

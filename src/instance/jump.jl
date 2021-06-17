@@ -23,26 +23,22 @@ function __init_PyJuMPInstance__()
 
         function get_variable_features(self, var_name)
             model = self.model
-            v = variable_by_name(model, var_name)
-            return get(model.ext[:miplearn][:variable_features], v, nothing)
+            return get(model.ext[:miplearn][:variable_features], var_name, nothing)
         end
 
         function get_variable_category(self, var_name)
             model = self.model
-            v = variable_by_name(model, var_name)
-            return get(model.ext[:miplearn][:variable_categories], v, nothing)
+            return get(model.ext[:miplearn][:variable_categories], var_name, nothing)
         end
 
         function get_constraint_features(self, cname)
             model = self.model
-            c = constraint_by_name(model, cname)
-            return get(model.ext[:miplearn][:constraint_features], c, nothing)
+            return get(model.ext[:miplearn][:constraint_features], cname, nothing)
         end
 
         function get_constraint_category(self, cname)
             model = self.model
-            c = constraint_by_name(model, cname)
-            return get(model.ext[:miplearn][:constraint_categories], c, nothing)
+            return get(model.ext[:miplearn][:constraint_categories], cname, nothing)
         end
     end
     copy!(PyJuMPInstance, Class)
@@ -78,23 +74,12 @@ function save(filename::AbstractString, instance::JuMPInstance)::Nothing
         miplearn.write_pickle_gz(instance.py.samples, py_samples_filename, quiet=true)
         py_samples = read(py_samples_filename)
 
-        # Replace variable/constraint refs by names
-        _to_names(d) = Dict(name(var) => value for (var, value) in d)
-        ext_original = instance.model.ext[:miplearn]
-        ext_names = Dict(
-            :variable_features => _to_names(ext_original[:variable_features]),
-            :variable_categories => _to_names(ext_original[:variable_categories]),
-            :constraint_features => _to_names(ext_original[:constraint_features]),
-            :constraint_categories => _to_names(ext_original[:constraint_categories]),
-            :instance_features => ext_original[:instance_features],
-        )
-
         # Generate JLD2 file
         jldsave(
             filename;
             miplearn_version="0.2",
             mps=mps,
-            ext=ext_names,
+            ext=instance.model.ext[:miplearn],
             py_samples=py_samples,
         )
     end
@@ -124,29 +109,12 @@ function load_instance(filename::AbstractString)::JuMPInstance
             mps_filename = "$(tempname()).mps.gz"
             write(mps_filename, file["mps"])
             model = read_from_file(mps_filename)
+            model.ext[:miplearn] = file["ext"]
 
             # Unpickle instance.py.samples
             py_samples_filename = tempname()
             write(py_samples_filename, file["py_samples"])
             py_samples = miplearn.read_pickle_gz(py_samples_filename, quiet=true)
-
-            # Replace variable/constraint names by refs
-            _to_var(model, d) = Dict(
-                variable_by_name(model, varname) => value
-                for (varname, value) in d
-            )
-            _to_constr(model, d) = Dict(
-                constraint_by_name(model, cname) => value
-                for (cname, value) in d
-            )
-            ext = file["ext"]
-            model.ext[:miplearn] = Dict(
-                :variable_features => _to_var(model, ext[:variable_features]),
-                :variable_categories => _to_var(model, ext[:variable_categories]),
-                :constraint_features => _to_constr(model, ext[:constraint_features]),
-                :constraint_categories => _to_constr(model, ext[:constraint_categories]),
-                :instance_features => ext[:instance_features],
-            )
 
             instance = JuMPInstance(model)
             instance.py.samples = py_samples
