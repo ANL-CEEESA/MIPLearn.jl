@@ -4,12 +4,12 @@
 
 function init_miplearn_ext(model)::Dict
     if :miplearn ∉ keys(model.ext)
-        model.ext[:miplearn] = Dict{Symbol, Any}()
-        model.ext[:miplearn][:instance_features] = [0.0]
-        model.ext[:miplearn][:variable_features] = Dict{AbstractString, Vector{Float64}}()
-        model.ext[:miplearn][:variable_categories] = Dict{AbstractString, String}()
-        model.ext[:miplearn][:constraint_features] = Dict{AbstractString, Vector{Float64}}()
-        model.ext[:miplearn][:constraint_categories] = Dict{AbstractString, String}()
+        model.ext[:miplearn] = Dict()
+        model.ext[:miplearn]["instance_features"] = [0.0]
+        model.ext[:miplearn]["variable_features"] = Dict{AbstractString, Vector{Float64}}()
+        model.ext[:miplearn]["variable_categories"] = Dict{AbstractString, String}()
+        model.ext[:miplearn]["constraint_features"] = Dict{AbstractString, Vector{Float64}}()
+        model.ext[:miplearn]["constraint_categories"] = Dict{AbstractString, String}()
     end
     return model.ext[:miplearn]
 end
@@ -17,7 +17,7 @@ end
 
 function set_features!(m::Model, f::Array{Float64})::Nothing
     ext = init_miplearn_ext(m)
-    ext[:instance_features] = f
+    ext["instance_features"] = f
     return
 end
 
@@ -25,7 +25,7 @@ end
 function set_features!(v::VariableRef, f::Array{Float64})::Nothing
     ext = init_miplearn_ext(v.model)
     n = _get_and_check_name(v)
-    ext[:variable_features][n] = f
+    ext["variable_features"][n] = f
     return
 end
 
@@ -33,7 +33,7 @@ end
 function set_category!(v::VariableRef, category::String)::Nothing
     ext = init_miplearn_ext(v.model)
     n = _get_and_check_name(v)
-    ext[:variable_categories][n] = category
+    ext["variable_categories"][n] = category
     return
 end
 
@@ -41,7 +41,7 @@ end
 function set_features!(c::ConstraintRef, f::Array{Float64})::Nothing
     ext = init_miplearn_ext(c.model)
     n = _get_and_check_name(c)
-    ext[:constraint_features][n] = f
+    ext["constraint_features"][n] = f
     return
 end
 
@@ -49,7 +49,7 @@ end
 function set_category!(c::ConstraintRef, category::String)::Nothing
     ext = init_miplearn_ext(c.model)
     n = _get_and_check_name(c)
-    ext[:constraint_categories][n] = category
+    ext["constraint_categories"][n] = category
     return
 end
 

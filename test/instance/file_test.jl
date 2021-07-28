@@ -19,6 +19,6 @@ using Cbc
         solve!(solver, file_instance)
 
         loaded = load_instance(filename)
-        @test length(loaded.py.samples) == 1
+        @test length(loaded.samples) == 1
     end    
 end

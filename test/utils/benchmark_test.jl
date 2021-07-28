@@ -8,17 +8,19 @@ using DataFrames
 
 
 @testset "BenchmarkRunner" begin
-    # Initialize instances and generate training data
+    @info "Building training data..."
     instances = [
         build_knapsack_file_instance(),
         build_knapsack_file_instance(),
     ]
-    parallel_solve!(
+    stats = parallel_solve!(
         LearningSolver(Cbc.Optimizer),
         instances,
     )
+    @test length(stats) == 2
+    @test stats[1] !== nothing
+    @test stats[2] !== nothing
 
-    # Fit and benchmark
     benchmark = BenchmarkRunner(
         solvers=Dict(
             "baseline" => LearningSolver(
@@ -34,13 +36,15 @@ using DataFrames
             ),
         ),
     )
+    @info "Fitting..."
     fit!(benchmark, instances)
-    parallel_solve!(benchmark, instances, n_trials=1)
 
-    # Write CSV
+    @info "Benchmarking..."
+    parallel_solve!(benchmark, instances, n_trials=2)
+
     csv_filename = tempname()
     write_csv!(benchmark, csv_filename)
     @test isfile(csv_filename)
     csv = DataFrame(CSV.File(csv_filename))
-    @test size(csv)[1] == 6
+    @test size(csv)[1] == 12
 end

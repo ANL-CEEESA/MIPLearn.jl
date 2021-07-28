@@ -41,6 +41,8 @@ function _optimize_and_capture_output!(model; tee::Bool=false)
     rm(logname)
     if tee
         println(log)
+        flush(stdout)
+        Base.Libc.flush_cstdio()
     end
     return log
 end
@@ -150,7 +152,7 @@ function build_test_instance_knapsack()
     @objective(model, Max, sum(x[i-1] * prices[i] for i in 1:n))
     @constraint(model, eq_capacity, sum(x[i-1] * weights[i] for i in 1:n) - z == 0)
 
-    return PyJuMPInstance(model)
+    return JuMPInstance(model).py
 end
 
 
@@ -159,7 +161,7 @@ function build_test_instance_infeasible()
     @variable(model, x, Bin)
     @objective(model, Max, x)
     @constraint(model, x >= 2)
-    return PyJuMPInstance(model)
+    return JuMPInstance(model).py
 end
 
 
@@ -389,6 +391,8 @@ end
 function get_constraints(
     data::JuMPSolverData;
     with_static::Bool,
+    with_sa::Bool,
+    with_lhs::Bool,
 )
     names = []
     senses, lhs, rhs = nothing, nothing, nothing
@@ -420,24 +424,26 @@ function get_constraints(
 
             if with_static
                 if ftype == JuMP.AffExpr
-                    push!(
-                        lhs,
-                        [
-                            (
-                                MOI.get(
+                    if with_lhs
+                        push!(
+                            lhs,
+                            [
+                                (
+                                    MOI.get(
+                                        constr.model.moi_backend,
+                                        MOI.VariableName(),
+                                        term.variable_index
+                                    ),
+                                    term.coefficient,
+                                )
+                                for term in MOI.get(
                                     constr.model.moi_backend,
-                                    MOI.VariableName(),
-                                    term.variable_index
-                                ),
-                                term.coefficient,
-                            )
-                            for term in MOI.get(
-                                constr.model.moi_backend,
-                                MOI.ConstraintFunction(),
-                                constr.index,
-                            ).terms
-                        ]
-                    )
+                                    MOI.ConstraintFunction(),
+                                    constr.index,
+                                ).terms
+                            ]
+                        )
+                    end
                     if stype == MOI.EqualTo{Float64}
                         push!(senses, "=")
                         push!(rhs, cset.value)
@@ -535,6 +541,8 @@ function __init_JuMPSolver__()
         ) = get_constraints(
             self.data,
             with_static=with_static,
+            with_sa=with_sa,
+            with_lhs=with_lhs,
         )
 
         get_constraint_attrs(self) = [

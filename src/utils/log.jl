@@ -44,16 +44,22 @@ function handle_message(logger::TimeLogger,
         color = :light_green
     end
     
+    flush(stdout)
+    flush(stderr)
+    Base.Libc.flush_cstdio()
     if level >= logger.screen_log_level
         printstyled(time_string, color=color)
         println(message)
     end
-    if logger.file != nothing && level >= logger.io_log_level
+    if logger.file !== nothing && level >= logger.io_log_level
         write(logger.file, time_string)
         write(logger.file, message)
         write(logger.file, "\n")
         flush(logger.file)
     end
+    flush(stdout)
+    flush(stderr)
+    Base.Libc.flush_cstdio()
 end
 
 function setup_logger()

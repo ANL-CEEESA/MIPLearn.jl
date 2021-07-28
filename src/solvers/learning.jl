@@ -17,6 +17,8 @@ function LearningSolver(
     mode::AbstractString = "exact",
     simulate_perfect::Bool = false,
     solve_lp::Bool = true,
+    extract_sa::Bool = true,
+    extract_lhs::Bool = true,
 )::LearningSolver
     return LearningSolver(
         miplearn.LearningSolver(
@@ -25,6 +27,8 @@ function LearningSolver(
             solve_lp=solve_lp,
             simulate_perfect=simulate_perfect,
             components=components,
+            extract_lhs=extract_lhs,
+            extract_sa=extract_sa,
         ),
         optimizer_factory,
     )
@@ -47,66 +51,83 @@ end
 
 function fit!(solver::LearningSolver, instances::Vector{<:Instance})
     @python_call solver.py.fit([instance.py for instance in instances])
+    return
 end
 
 
-function parallel_solve!(solver::LearningSolver, instances::Vector{FileInstance})
-    filenames = [instance.filename for instance in instances]
+function _solve(
+    solver_filename,
+    instance_filename;
+    discard_output::Bool,
+)
+    @info "solve $instance_filename"
+    solver = load_solver(solver_filename)
+    solver.py._silence_miplearn_logger()
+    stats = solve!(
+        solver, 
+        FileInstance(instance_filename),
+        discard_output = discard_output,
+    )
+    solver.py._restore_miplearn_logger()
+    GC.gc()
+    @info "solve $instance_filename [done]"
+    return stats
+end
+
+
+function parallel_solve!(
+    solver::LearningSolver,
+    instances::Vector{FileInstance};
+    discard_output::Bool = false,
+)
+    instance_filenames = [instance.filename for instance in instances]
     solver_filename = tempname()
     save(solver_filename, solver)
-    @sync @distributed for filename in filenames
-        s = load_solver(solver_filename)
-        solve!(s, FileInstance(filename))
-        nothing
-    end
+    return pmap(
+        instance_filename -> _solve(
+            solver_filename,
+            instance_filename,
+            discard_output = discard_output,
+        ),
+        instance_filenames,
+        on_error=identity,
+    )
 end
 
 
 function save(filename::AbstractString, solver::LearningSolver)
-    @info "Writing: $filename"
-    time = @elapsed begin
-        # Pickle solver.py
-        internal_solver = solver.py.internal_solver
-        internal_solver_prototype = solver.py.internal_solver_prototype
-        solver.py.internal_solver = nothing
-        solver.py.internal_solver_prototype = nothing
-        solver_py_filename = tempname()
-        miplearn.write_pickle_gz(solver.py, solver_py_filename, quiet=true)
-        solver_py = read(solver_py_filename)
-        solver.py.internal_solver = internal_solver
-        solver.py.internal_solver_prototype = internal_solver_prototype
-
-        jldsave(
-            filename;
-            miplearn_version="0.2",
-            solver_py=solver_py,
-            optimizer_factory=solver.optimizer_factory,
-        )
-    end
-    @info @sprintf("File written in %.2f seconds", time)
+    internal_solver = solver.py.internal_solver
+    internal_solver_prototype = solver.py.internal_solver_prototype
+    solver.py.internal_solver = nothing
+    solver.py.internal_solver_prototype = nothing
+    solver_py_filename = tempname()
+    miplearn.write_pickle_gz(solver.py, solver_py_filename)
+    solver_py = read(solver_py_filename)
+    solver.py.internal_solver = internal_solver
+    solver.py.internal_solver_prototype = internal_solver_prototype
+    jldsave(
+        filename;
+        miplearn_version="0.2",
+        solver_py=solver_py,
+        optimizer_factory=solver.optimizer_factory,
+    )
     return
 end
 
 
 function load_solver(filename::AbstractString)::LearningSolver
-    @info "Reading: $filename"
-    solver = nothing
-    time = @elapsed begin
-        jldopen(filename, "r") do file
-            _check_miplearn_version(file)
-            solve_py_filename = tempname()
-            write(solve_py_filename, file["solver_py"])
-            solver_py = miplearn.read_pickle_gz(solve_py_filename, quiet=true)
-            internal_solver = JuMPSolver(file["optimizer_factory"])
-            solver_py.internal_solver_prototype = internal_solver
-            solver = LearningSolver(
-                solver_py,
-                file["optimizer_factory"],
-            )
-        end
+    jldopen(filename, "r") do file
+        _check_miplearn_version(file)
+        solve_py_filename = tempname()
+        write(solve_py_filename, file["solver_py"])
+        solver_py = miplearn.read_pickle_gz(solve_py_filename)
+        internal_solver = JuMPSolver(file["optimizer_factory"])
+        solver_py.internal_solver_prototype = internal_solver
+        return LearningSolver(
+            solver_py,
+            file["optimizer_factory"],
+        )
     end
-    @info @sprintf("File read in %.2f seconds", time)
-    return solver
 end
 
 

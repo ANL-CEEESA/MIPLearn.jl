@@ -13,7 +13,7 @@ using MIPLearn
         instance = JuMPInstance(model)
         stats = solve!(solver, instance)
         @test stats["mip_lower_bound"] == 11.0
-        @test length(instance.py.samples) == 1
+        @test length(instance.samples) == 1
         fit!(solver, [instance])
         solve!(solver, instance)
     end
@@ -41,6 +41,6 @@ using MIPLearn
         solver = LearningSolver(Cbc.Optimizer)
         solve!(solver, instance, discard_output=true)
         loaded = load_instance(instance.filename)
-        @test length(loaded.py.samples) == 0
+        @test length(loaded.samples) == 0
     end
 end

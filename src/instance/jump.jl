@@ -5,85 +5,88 @@
 using JuMP
 using JLD2
 
+mutable struct JuMPInstance <: Instance
+    py::Union{Nothing,PyCall.PyObject}
+    model::Union{Nothing,JuMP.Model}
+    mps::Union{Nothing,Vector{UInt8}}
+    ext::AbstractDict
+    samples::Vector{PyCall.PyObject}
+
+    function JuMPInstance(model::JuMP.Model)
+        init_miplearn_ext(model)
+        instance = new(nothing, model, nothing, model.ext[:miplearn], [])
+        py = PyJuMPInstance(instance)
+        instance.py = py
+        return instance
+    end
+
+    function JuMPInstance(mps::Vector{UInt8}, ext::AbstractDict)
+        "instance_features" in keys(ext) || error("provided ext is not initialized")
+        instance = new(nothing, nothing, mps, ext, [])
+        instance.py = PyJuMPInstance(instance)
+        return instance
+    end
+end
+
+function to_model(instance::JuMPInstance)::JuMP.Model
+    if instance.model === nothing
+        mps_filename = "$(tempname()).mps.gz"
+        write(mps_filename, instance.mps)
+        instance.model = read_from_file(mps_filename)
+        instance.model.ext[:miplearn] = instance.ext
+    end
+    return instance.model
+end
+
+get_instance_features(instance::JuMPInstance) = instance.ext["instance_features"]
+get_variable_features(instance::JuMPInstance) = instance.ext["variable_features"]
+get_variable_categories(instance::JuMPInstance) = instance.ext["variable_categories"]
+get_constraint_features(instance::JuMPInstance) = instance.ext["constraint_features"]
+get_constraint_categories(instance::JuMPInstance) = instance.ext["constraint_categories"]
+get_samples(instance::JuMPInstance) = instance.samples
+
+function push_sample!(instance::JuMPInstance, sample::PyCall.PyObject)
+    push!(instance.samples, sample)
+end
+
 function __init_PyJuMPInstance__()
     @pydef mutable struct Class <: miplearn.Instance
-        function __init__(self, model)
-            init_miplearn_ext(model)
-            self.model = model
-            self.samples = []
+        function __init__(self, jl)
+            self.jl = jl
         end
-
-        function to_model(self)
-            return self.model
-        end
-
-        function get_instance_features(self)
-            return self.model.ext[:miplearn][:instance_features]
-        end
-
-        function get_variable_features(self, var_name)
-            model = self.model
-            return get(model.ext[:miplearn][:variable_features], var_name, nothing)
-        end
-
-        function get_variable_category(self, var_name)
-            model = self.model
-            return get(model.ext[:miplearn][:variable_categories], var_name, nothing)
-        end
-
-        function get_constraint_features(self, cname)
-            model = self.model
-            return get(model.ext[:miplearn][:constraint_features], cname, nothing)
-        end
-
-        function get_constraint_category(self, cname)
-            model = self.model
-            return get(model.ext[:miplearn][:constraint_categories], cname, nothing)
-        end
+        to_model(self) = to_model(self.jl)
+        get_instance_features(self) = get_instance_features(self.jl)
+        get_variable_features(self) = get_variable_features(self.jl)
+        get_variable_categories(self) = get_variable_categories(self.jl)
+        get_constraint_features(self,) = get_constraint_features(self.jl)
+        get_constraint_categories(self) = get_constraint_categories(self.jl)
+        get_samples(self) = get_samples(self.jl)
+        push_sample(self, sample) = push_sample!(self.jl, sample)
     end
     copy!(PyJuMPInstance, Class)
 end
 
-
-struct JuMPInstance <: Instance
-    py::PyCall.PyObject
-    model::Model
-end
-
-
-function JuMPInstance(model)
-    model isa Model || error("model should be a JuMP.Model. Found $(typeof(model)) instead.")
-    return JuMPInstance(
-        PyJuMPInstance(model),
-        model,
-    )
-end
-
-
 function save(filename::AbstractString, instance::JuMPInstance)::Nothing
-    @info "Writing: $filename"
-    time = @elapsed begin
-        # Convert JuMP model to MPS
-        mps_filename = "$(tempname()).mps.gz"
-        write_to_file(instance.model, mps_filename)
-        mps = read(mps_filename)
+    # Convert JuMP model to MPS
+    mps_filename = "$(tempname()).mps.gz"
+    model = instance.py.to_model()
+    write_to_file(model, mps_filename)
+    mps = read(mps_filename)
 
-        # Pickle instance.py.samples. Ideally, we would use dumps and loads, but this
-        # causes some issues with PyCall, probably due to automatic type conversions.
-        py_samples_filename = tempname()
-        miplearn.write_pickle_gz(instance.py.samples, py_samples_filename, quiet=true)
-        py_samples = read(py_samples_filename)
+    # Pickle instance.py.samples. Ideally, we would use dumps and loads, but this
+    # causes some issues with PyCall, probably due to automatic type conversions.
+    samples_filename = tempname()
+    miplearn.write_pickle_gz(instance.samples, samples_filename)
+    samples = read(samples_filename)
 
-        # Generate JLD2 file
-        jldsave(
-            filename;
-            miplearn_version="0.2",
-            mps=mps,
-            ext=instance.model.ext[:miplearn],
-            py_samples=py_samples,
-        )
-    end
-    @info @sprintf("File written in %.2f seconds", time)
+    # Generate JLD2 file
+    jldsave(
+        filename;
+        miplearn_version="0.2",
+        mps=mps,
+        ext=model.ext[:miplearn],
+        samples=samples,
+    )
     return
 end
 
@@ -97,32 +100,15 @@ function _check_miplearn_version(file)
     )
 end
 
-
 function load_instance(filename::AbstractString)::JuMPInstance
-    @info "Reading: $filename"
-    instance = nothing
-    time = @elapsed begin
-        jldopen(filename, "r") do file
-            _check_miplearn_version(file)
-
-            # Convert MPS to JuMP
-            mps_filename = "$(tempname()).mps.gz"
-            write(mps_filename, file["mps"])
-            model = read_from_file(mps_filename)
-            model.ext[:miplearn] = file["ext"]
-
-            # Unpickle instance.py.samples
-            py_samples_filename = tempname()
-            write(py_samples_filename, file["py_samples"])
-            py_samples = miplearn.read_pickle_gz(py_samples_filename, quiet=true)
-
-            instance = JuMPInstance(model)
-            instance.py.samples = py_samples
-        end
+    jldopen(filename, "r") do file
+        _check_miplearn_version(file)
+        instance = JuMPInstance(file["mps"], file["ext"])
+        samples_filename = tempname()
+        write(samples_filename, file["samples"])
+        @time instance.samples = miplearn.read_pickle_gz(samples_filename)
+        return instance
     end
-    @info @sprintf("File read in %.2f seconds", time)
-    return instance
 end
-
 
 export JuMPInstance, save, load_instance
