@@ -8,10 +8,13 @@ mutable struct FileInstance <: Instance
     py::Union{Nothing,PyCall.PyObject}
     loaded::Union{Nothing, JuMPInstance}
     filename::AbstractString
+    h5::PyCall.PyObject
 
-    function FileInstance(filename::String)::FileInstance
+    function FileInstance(filename::AbstractString)::FileInstance
         instance = new(nothing, nothing, filename)
         instance.py = PyFileInstance(instance)
+        instance.h5 = Hdf5Sample(filename)
+        instance.filename = filename
         return instance
     end
 end
@@ -21,8 +24,14 @@ get_instance_features(instance::FileInstance) = get_instance_features(instance.l
 get_variable_features(instance::FileInstance) = get_variable_features(instance.loaded)
 get_variable_categories(instance::FileInstance) = get_variable_categories(instance.loaded)
 get_constraint_features(instance::FileInstance) = get_constraint_features(instance.loaded)
-get_samples(instance::FileInstance) = get_samples(instance.loaded)
-create_sample!(instance::FileInstance) = create_sample!(instance.loaded)
+
+function get_samples(instance::FileInstance)
+    return [instance.h5]
+end
+
+function create_sample!(instance::FileInstance)
+    return instance.h5
+end
 
 function get_constraint_categories(instance::FileInstance)
     return get_constraint_categories(instance.loaded)
@@ -41,7 +50,6 @@ function free(instance::FileInstance)
 end
 
 function flush(instance::FileInstance)
-    save(instance.filename, instance.loaded)
 end
 
 function __init_PyFileInstance__()

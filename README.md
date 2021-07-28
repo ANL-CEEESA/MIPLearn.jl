@@ -147,14 +147,14 @@ for i in 1:600
     @feature(...)
     @category(...)
     
-    # Save instances to a file
+    # Save instances to file
     instance = JuMPInstance(m)
-    save("instance-$i.bin", instance)
+    save("instance-$i.h5", instance)
 end
 
 # Initialize training and test instances
-training_instances = [FileInstance("instance-$i.bin") for i in 1:500]
-test_instances = [FileInstance("instance-$i.bin") for i in 501:600]
+training_instances = [FileInstance("instance-$i.h5") for i in 1:500]
+test_instances = [FileInstance("instance-$i.h5") for i in 501:600]
 
 # Initialize solver
 solver = LearningSolver(Cbc.Optimizer)

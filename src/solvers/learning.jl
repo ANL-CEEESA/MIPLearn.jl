@@ -3,6 +3,7 @@
 #  Released under the modified BSD license. See COPYING.md for more details.
 
 using Distributed
+using JLD2
 
 
 struct LearningSolver
@@ -117,7 +118,6 @@ end
 
 function load_solver(filename::AbstractString)::LearningSolver
     jldopen(filename, "r") do file
-        _check_miplearn_version(file)
         solve_py_filename = tempname()
         write(solve_py_filename, file["solver_py"])
         solver_py = miplearn.read_pickle_gz(solve_py_filename)

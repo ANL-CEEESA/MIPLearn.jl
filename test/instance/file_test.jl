@@ -14,11 +14,15 @@ using Cbc
         filename = tempname()
         save(filename, instance)
 
+        h5 = MIPLearn.Hdf5Sample(filename)
+        @test h5.get_scalar("miplearn_version") == "0002"
+        @test length(h5.get_bytes("mps")) > 0
+        @test length(h5.get_scalar("jump_ext")) > 0
+
         file_instance = FileInstance(filename)
         solver = LearningSolver(Cbc.Optimizer)
         solve!(solver, file_instance)
 
-        loaded = load_instance(filename)
-        @test length(loaded.samples) == 1
+        @test length(h5.get_vector("mip_var_values")) == 3
     end    
 end
