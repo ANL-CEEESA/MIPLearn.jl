@@ -45,8 +45,10 @@ get_constraint_features(instance::JuMPInstance) = instance.ext["constraint_featu
 get_constraint_categories(instance::JuMPInstance) = instance.ext["constraint_categories"]
 get_samples(instance::JuMPInstance) = instance.samples
 
-function push_sample!(instance::JuMPInstance, sample::PyCall.PyObject)
+function create_sample!(instance::JuMPInstance)
+    sample = MemorySample()
     push!(instance.samples, sample)
+    return sample
 end
 
 function __init_PyJuMPInstance__()
@@ -61,7 +63,7 @@ function __init_PyJuMPInstance__()
         get_constraint_features(self,) = get_constraint_features(self.jl)
         get_constraint_categories(self) = get_constraint_categories(self.jl)
         get_samples(self) = get_samples(self.jl)
-        push_sample(self, sample) = push_sample!(self.jl, sample)
+        create_sample(self) = create_sample!(self.jl)
     end
     copy!(PyJuMPInstance, Class)
 end
@@ -106,7 +108,7 @@ function load_instance(filename::AbstractString)::JuMPInstance
         instance = JuMPInstance(file["mps"], file["ext"])
         samples_filename = tempname()
         write(samples_filename, file["samples"])
-        @time instance.samples = miplearn.read_pickle_gz(samples_filename)
+        instance.samples = miplearn.read_pickle_gz(samples_filename)
         return instance
     end
 end

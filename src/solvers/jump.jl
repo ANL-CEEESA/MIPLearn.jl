@@ -375,7 +375,7 @@ function get_variables(
 
     rc = isempty(data.reduced_costs) ? nothing : data.reduced_costs
 
-    vf = miplearn.features.VariableFeatures(
+    vf = miplearn.solvers.internal.Variables(
         names=names,
         lower_bounds=lb,
         upper_bounds=ub,
@@ -463,7 +463,7 @@ function get_constraints(
         end
     end
 
-    return miplearn.features.ConstraintFeatures(
+    return miplearn.solvers.internal.Constraints(
         names=names,
         senses=senses,
         lhs=lhs,
