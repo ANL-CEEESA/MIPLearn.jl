@@ -23,6 +23,6 @@ using Cbc
         solver = LearningSolver(Cbc.Optimizer)
         solve!(solver, file_instance)
 
-        @test length(h5.get_vector("mip_var_values")) == 3
-    end    
+        @test length(h5.get_array("mip_var_values")) == 3
+    end
 end

@@ -11,7 +11,7 @@ macro python_call(expr)
             return $(esc(expr))
         catch e
             if isa(e, PyCall.PyError)
-                printstyled("Uncaught Python exception:\n", bold=true, color=:red)
+                printstyled("Uncaught Python exception:\n", bold = true, color = :red)
                 traceback.print_exception(e.T, e.val, e.traceback)
             end
             rethrow()

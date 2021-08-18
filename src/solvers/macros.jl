@@ -6,10 +6,10 @@ function init_miplearn_ext(model)::Dict
     if :miplearn ∉ keys(model.ext)
         model.ext[:miplearn] = Dict()
         model.ext[:miplearn]["instance_features"] = [0.0]
-        model.ext[:miplearn]["variable_features"] = Dict{AbstractString, Vector{Float64}}()
-        model.ext[:miplearn]["variable_categories"] = Dict{AbstractString, String}()
-        model.ext[:miplearn]["constraint_features"] = Dict{AbstractString, Vector{Float64}}()
-        model.ext[:miplearn]["constraint_categories"] = Dict{AbstractString, String}()
+        model.ext[:miplearn]["variable_features"] = Dict{AbstractString,Vector{Float64}}()
+        model.ext[:miplearn]["variable_categories"] = Dict{AbstractString,String}()
+        model.ext[:miplearn]["constraint_features"] = Dict{AbstractString,Vector{Float64}}()
+        model.ext[:miplearn]["constraint_categories"] = Dict{AbstractString,String}()
     end
     return model.ext[:miplearn]
 end
@@ -71,11 +71,10 @@ function _get_and_check_name(obj)
     n = name(obj)
     length(n) > 0 || error(
         "Features and categories can only be assigned to variables and " *
-        "constraints that have names. Unnamed model element detected."
+        "constraints that have names. Unnamed model element detected.",
     )
     return n
 end
 
 
-export @feature,
-       @category
+export @feature, @category

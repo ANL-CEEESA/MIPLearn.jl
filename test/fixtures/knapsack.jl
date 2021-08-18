@@ -15,14 +15,14 @@ function build_knapsack_model()
 
     n = length(weights)
     @variable(model, x[1:n], Bin)
-    @objective(model, Max, sum(x[i] * prices[i] for i in 1:n))
-    @constraint(model, c1, sum(x[i] * weights[i] for i in 1:n) <= capacity)
+    @objective(model, Max, sum(x[i] * prices[i] for i = 1:n))
+    @constraint(model, c1, sum(x[i] * weights[i] for i = 1:n) <= capacity)
 
     # Add ML information to the model
     @feature(model, [5.0])
     @feature(c1, [1.0, 2.0, 3.0])
     @category(c1, "c1")
-    for i in 1:n
+    for i = 1:n
         @feature(x[i], [weights[i]; prices[i]])
         @category(x[i], "type-$i")
     end
@@ -36,7 +36,7 @@ function build_knapsack_model()
     @test model.ext[:miplearn]["variable_categories"]["x[3]"] == "type-3"
     @test model.ext[:miplearn]["constraint_features"]["c1"] == [1.0, 2.0, 3.0]
     @test model.ext[:miplearn]["constraint_categories"]["c1"] == "c1"
-    @test model.ext[:miplearn]["instance_features"] == [5.0]    
+    @test model.ext[:miplearn]["instance_features"] == [5.0]
 
     return model
 end

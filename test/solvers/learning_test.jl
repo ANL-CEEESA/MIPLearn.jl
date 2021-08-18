@@ -39,7 +39,7 @@ using MIPLearn
     @testset "Discard output" begin
         instance = build_knapsack_file_instance()
         solver = LearningSolver(Cbc.Optimizer)
-        solve!(solver, instance, discard_output=true)
+        solve!(solver, instance, discard_output = true)
         loaded = load_instance(instance.filename)
         @test length(loaded.samples) == 0
     end

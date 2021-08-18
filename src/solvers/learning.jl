@@ -8,7 +8,7 @@ using JLD2
 
 struct LearningSolver
     py::PyCall.PyObject
-    optimizer_factory
+    optimizer_factory::Any
 end
 
 
@@ -23,13 +23,13 @@ function LearningSolver(
 )::LearningSolver
     return LearningSolver(
         miplearn.LearningSolver(
-            solver=JuMPSolver(optimizer_factory),
-            mode=mode,
-            solve_lp=solve_lp,
-            simulate_perfect=simulate_perfect,
-            components=components,
-            extract_lhs=extract_lhs,
-            extract_sa=extract_sa,
+            solver = JuMPSolver(optimizer_factory),
+            mode = mode,
+            solve_lp = solve_lp,
+            simulate_perfect = simulate_perfect,
+            components = components,
+            extract_lhs = extract_lhs,
+            extract_sa = extract_sa,
         ),
         optimizer_factory,
     )
@@ -44,8 +44,8 @@ function solve!(
 )
     return @python_call solver.py.solve(
         instance.py,
-        tee=tee,
-        discard_output=discard_output,
+        tee = tee,
+        discard_output = discard_output,
     )
 end
 
@@ -56,19 +56,11 @@ function fit!(solver::LearningSolver, instances::Vector{<:Instance})
 end
 
 
-function _solve(
-    solver_filename,
-    instance_filename;
-    discard_output::Bool,
-)
+function _solve(solver_filename, instance_filename; discard_output::Bool)
     @info "solve $instance_filename"
     solver = load_solver(solver_filename)
     solver.py._silence_miplearn_logger()
-    stats = solve!(
-        solver, 
-        FileInstance(instance_filename),
-        discard_output = discard_output,
-    )
+    stats = solve!(solver, FileInstance(instance_filename), discard_output = discard_output)
     solver.py._restore_miplearn_logger()
     GC.gc()
     @info "solve $instance_filename [done]"
@@ -85,13 +77,10 @@ function parallel_solve!(
     solver_filename = tempname()
     save(solver_filename, solver)
     return pmap(
-        instance_filename -> _solve(
-            solver_filename,
-            instance_filename,
-            discard_output = discard_output,
-        ),
+        instance_filename ->
+            _solve(solver_filename, instance_filename, discard_output = discard_output),
         instance_filenames,
-        on_error=identity,
+        on_error = identity,
     )
 end
 
@@ -108,9 +97,9 @@ function save(filename::AbstractString, solver::LearningSolver)
     solver.py.internal_solver_prototype = internal_solver_prototype
     jldsave(
         filename;
-        miplearn_version="0.2",
-        solver_py=solver_py,
-        optimizer_factory=solver.optimizer_factory,
+        miplearn_version = "0.2",
+        solver_py = solver_py,
+        optimizer_factory = solver.optimizer_factory,
     )
     return
 end
@@ -123,18 +112,9 @@ function load_solver(filename::AbstractString)::LearningSolver
         solver_py = miplearn.read_pickle_gz(solve_py_filename)
         internal_solver = JuMPSolver(file["optimizer_factory"])
         solver_py.internal_solver_prototype = internal_solver
-        return LearningSolver(
-            solver_py,
-            file["optimizer_factory"],
-        )
+        return LearningSolver(solver_py, file["optimizer_factory"])
     end
 end
 
 
-export Instance,
-       LearningSolver,
-       solve!,
-       fit!,
-       parallel_solve!,
-       save,
-       load_solver
+export Instance, LearningSolver, solve!, fit!, parallel_solve!, save, load_solver

@@ -44,13 +44,28 @@ function __init__()
     __init_PyFileInstance__()
     __init_PyJuMPInstance__()
     __init_JuMPSolver__()
+
+    py"""
+    import numpy as np
+
+    def to_str_array(values):
+        if values is None:
+            return None
+        return np.array(values, dtype="S")
+
+    def from_str_array(values):
+        return [v.decode() for v in values]
+    """
 end
 
+to_str_array(values) = py"to_str_array"(values)
+from_str_array(values) = py"from_str_array"(values)
+
 export DynamicLazyConstraintsComponent,
-       UserCutsComponent,
-       ObjectiveValueComponent,
-       PrimalSolutionComponent,
-       StaticLazyConstraintsComponent,
-       MinPrecisionThreshold
+    UserCutsComponent,
+    ObjectiveValueComponent,
+    PrimalSolutionComponent,
+    StaticLazyConstraintsComponent,
+    MinPrecisionThreshold
 
 end # module

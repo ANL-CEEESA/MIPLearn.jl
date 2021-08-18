@@ -2,7 +2,4 @@
 #  Copyright (C) 2020-2021, UChicago Argonne, LLC. All rights reserved.
 #  Released under the modified BSD license. See COPYING.md for more details.
 
-abstract type Instance
-end
-
-
+abstract type Instance end
