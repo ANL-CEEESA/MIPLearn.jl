@@ -9,9 +9,13 @@ mutable struct FileInstance <: Instance
     loaded::Union{Nothing,JuMPInstance}
     filename::AbstractString
     h5::PyCall.PyObject
+    lazycb::Union{Nothing,Tuple{Function,Function}}
 
-    function FileInstance(filename::AbstractString)::FileInstance
-        instance = new(nothing, nothing, filename)
+    function FileInstance(
+        filename::AbstractString;
+        lazycb::Union{Nothing,Tuple{Function,Function}} = nothing,
+    )::FileInstance
+        instance = new(nothing, nothing, filename, nothing, lazycb)
         instance.py = PyFileInstance(instance)
         instance.h5 = Hdf5Sample(filename)
         instance.filename = filename
@@ -20,15 +24,26 @@ mutable struct FileInstance <: Instance
 end
 
 to_model(instance::FileInstance) = to_model(instance.loaded)
+
 get_instance_features(instance::FileInstance) = get_instance_features(instance.loaded)
+
 get_variable_features(instance::FileInstance, names) =
     get_variable_features(instance.loaded, names)
+
 get_variable_categories(instance::FileInstance, names) =
     get_variable_categories(instance.loaded, names)
+
 get_constraint_features(instance::FileInstance, names) =
     get_constraint_features(instance.loaded, names)
+
 get_constraint_categories(instance::FileInstance, names) =
     get_constraint_categories(instance.loaded, names)
+
+find_violated_lazy_constraints(instance::FileInstance, solver) =
+    find_violated_lazy_constraints(instance.loaded, solver)
+
+enforce_lazy_constraint(instance::FileInstance, solver, violation) =
+    enforce_lazy_constraint(instance.loaded, solver, violation)
 
 function get_samples(instance::FileInstance)
     return [instance.h5]
@@ -40,7 +55,7 @@ end
 
 function load(instance::FileInstance)
     if instance.loaded === nothing
-        instance.loaded = load_instance(instance.filename)
+        instance.loaded = load_instance(instance.filename, lazycb = instance.lazycb)
     end
 end
 
@@ -72,6 +87,10 @@ function __init_PyFileInstance__()
         load(self) = load(self.jl)
         free(self) = free(self.jl)
         flush(self) = flush(self.jl)
+        find_violated_lazy_constraints(self, solver, _) =
+            find_violated_lazy_constraints(self.jl, solver)
+        enforce_lazy_constraint(self, solver, _, violation) =
+            enforce_lazy_constraint(self.jl, solver, violation)
     end
     copy!(PyFileInstance, Class)
 end

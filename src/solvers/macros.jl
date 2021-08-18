@@ -53,6 +53,13 @@ function set_category!(c::ConstraintRef, category::String)::Nothing
     return
 end
 
+function set_lazy_callback!(model::Model, find_cb::Function, enforce_cb::Function)::Nothing
+    ext = init_miplearn_ext(model)
+    ext["lazy_find_cb"] = find_cb
+    ext["lazy_enforce_cb"] = enforce_cb
+    return
+end
+
 
 macro feature(obj, features)
     quote
@@ -67,6 +74,12 @@ macro category(obj, category)
     end
 end
 
+macro lazycb(obj, find_cb, enforce_cb)
+    quote
+        set_lazy_callback!($(esc(obj)), $(esc(find_cb)), $(esc(enforce_cb)))
+    end
+end
+
 function _get_and_check_name(obj)
     n = name(obj)
     length(n) > 0 || error(
@@ -77,4 +90,4 @@ function _get_and_check_name(obj)
 end
 
 
-export @feature, @category
+export @feature, @category, @lazycb

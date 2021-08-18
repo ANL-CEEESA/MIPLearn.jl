@@ -9,6 +9,8 @@ using MathOptInterface
 using TimerOutputs
 const MOI = MathOptInterface
 
+import JuMP: value
+
 mutable struct JuMPSolverData
     optimizer_factory::Any
     varname_to_var::Dict{String,VariableRef}
@@ -19,6 +21,7 @@ mutable struct JuMPSolverData
     solution::Dict{JuMP.VariableRef,Float64}
     reduced_costs::Vector{Float64}
     dual_values::Dict{JuMP.ConstraintRef,Float64}
+    cb_data::Any
 end
 
 
@@ -175,10 +178,25 @@ function remove_constraints(data::JuMPSolverData, names::Vector{String})::Nothin
 end
 
 
-function solve(data::JuMPSolverData; tee::Bool = false, iteration_cb = nothing)
+function solve(
+    data::JuMPSolverData;
+    tee::Bool = false,
+    iteration_cb = nothing,
+    lazy_cb = nothing,
+)
     model = data.model
     wallclock_time = 0
     log = ""
+
+    if lazy_cb !== nothing
+        function lazy_cb_wrapper(cb_data)
+            data.cb_data = cb_data
+            lazy_cb(nothing, nothing)
+            data.cb_data = nothing
+        end
+        MOI.set(model, MOI.LazyConstraintCallback(), lazy_cb_wrapper)
+    end
+
     while true
         wallclock_time += @elapsed begin
             log *= _optimize_and_capture_output!(model, tee = tee)
@@ -189,6 +207,7 @@ function solve(data::JuMPSolverData; tee::Bool = false, iteration_cb = nothing)
             break
         end
     end
+
     if is_infeasible(data)
         data.solution = Dict()
         primal_bound = nothing
@@ -452,6 +471,7 @@ function __init_JuMPSolver__()
                 Dict(),  # solution
                 [],  # reduced_costs
                 Dict(),  # dual_values
+                nothing,  # cb_data
             )
         end
 
@@ -555,12 +575,27 @@ function __init_JuMPSolver__()
             iteration_cb = nothing,
             lazy_cb = nothing,
             user_cut_cb = nothing,
-        ) = solve(self.data, tee = tee, iteration_cb = iteration_cb)
+        ) = solve(self.data, tee = tee, iteration_cb = iteration_cb, lazy_cb = lazy_cb)
 
         solve_lp(self; tee = false) = solve_lp(self.data, tee = tee)
     end
     copy!(JuMPSolver, Class)
 end
 
+function value(solver::JuMPSolverData, var::VariableRef)
+    if solver.cb_data !== nothing
+        return JuMP.callback_value(solver.cb_data, var)
+    else
+        return JuMP.value(var)
+    end
+end
 
-export JuMPSolver
+function submit(solver::JuMPSolverData, con::AbstractConstraint, name::String = "")
+    if solver.cb_data !== nothing
+        MOI.submit(solver.model, MOI.LazyConstraint(solver.cb_data), con)
+    else
+        JuMP.add_constraint(solver.model, con, name)
+    end
+end
+
+export JuMPSolver, submit

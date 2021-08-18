@@ -4,10 +4,10 @@
 
 using PackageCompiler
 
-using CSV
 using Cbc
 using Clp
 using Conda
+using CSV
 using DataFrames
 using Distributed
 using JLD2
@@ -20,10 +20,10 @@ using PyCall
 using TimerOutputs
 
 pkg = [
-    :CSV
     :Cbc
     :Clp
     :Conda
+    :CSV
     :DataFrames
     :Distributed
     :JLD2

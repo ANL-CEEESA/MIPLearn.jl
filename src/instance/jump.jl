@@ -12,7 +12,7 @@ mutable struct JuMPInstance <: Instance
     ext::AbstractDict
     samples::Vector{PyCall.PyObject}
 
-    function JuMPInstance(model::JuMP.Model)
+    function JuMPInstance(model::JuMP.Model)::JuMPInstance
         init_miplearn_ext(model)
         instance = new(nothing, model, nothing, model.ext[:miplearn], [])
         py = PyJuMPInstance(instance)
@@ -84,6 +84,18 @@ function create_sample!(instance::JuMPInstance)
     return sample
 end
 
+function find_violated_lazy_constraints(instance::JuMPInstance, solver)::Vector{String}
+    if "lazy_find_cb" ∈ keys(instance.model.ext[:miplearn])
+        return instance.model.ext[:miplearn]["lazy_find_cb"](instance.model, solver.data)
+    else
+        return []
+    end
+end
+
+function enforce_lazy_constraint(instance::JuMPInstance, solver, violation::String)::Nothing
+    instance.model.ext[:miplearn]["lazy_enforce_cb"](instance.model, solver.data, violation)
+end
+
 function __init_PyJuMPInstance__()
     @pydef mutable struct Class <: miplearn.Instance
         function __init__(self, jl)
@@ -101,6 +113,10 @@ function __init_PyJuMPInstance__()
             to_str_array(get_constraint_categories(self.jl, from_str_array(names)))
         get_samples(self) = get_samples(self.jl)
         create_sample(self) = create_sample!(self.jl)
+        find_violated_lazy_constraints(self, solver, _) =
+            find_violated_lazy_constraints(self.jl, solver)
+        enforce_lazy_constraint(self, solver, _, violation) =
+            enforce_lazy_constraint(self.jl, solver, violation)
     end
     copy!(PyJuMPInstance, Class)
 end
@@ -116,7 +132,11 @@ function save(filename::AbstractString, instance::JuMPInstance)::Nothing
     h5 = Hdf5Sample(filename, mode = "w")
     h5.put_scalar("miplearn_version", "0002")
     h5.put_bytes("mps", mps)
-    h5.put_scalar("jump_ext", JSON.json(model.ext[:miplearn]))
+
+    ext = copy(model.ext[:miplearn])
+    delete!(ext, "lazy_find_cb")
+    delete!(ext, "lazy_enforce_cb")
+    h5.put_scalar("jump_ext", JSON.json(ext))
     return
 end
 
@@ -130,12 +150,19 @@ function _check_miplearn_version(h5)
     )
 end
 
-function load_instance(filename::AbstractString)::JuMPInstance
+function load_instance(
+    filename::AbstractString;
+    lazycb::Union{Nothing,Tuple{Function,Function}} = nothing,
+)::JuMPInstance
     h5 = Hdf5Sample(filename)
     _check_miplearn_version(h5)
     mps = h5.get_bytes("mps")
-    ext = h5.get_scalar("jump_ext")
-    instance = JuMPInstance(Vector{UInt8}(mps), JSON.parse(ext))
+    ext = JSON.parse(h5.get_scalar("jump_ext"))
+    if lazycb !== nothing
+        ext["lazy_find_cb"] = lazycb[1]
+        ext["lazy_enforce_cb"] = lazycb[2]
+    end
+    instance = JuMPInstance(Vector{UInt8}(mps), ext)
     return instance
 end
 
