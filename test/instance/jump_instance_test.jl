@@ -29,7 +29,7 @@ function enforce_lazy(model::Model, cb_data, violation::String)::Nothing
     return
 end
 
-function build_model()
+function build_model(data)
     model = Model()
     @variable(model, x, Bin)
     @variable(model, y, Bin)
@@ -41,7 +41,7 @@ end
 
 @testset "Lazy callback" begin
     @testset "JuMPInstance" begin
-        model = build_model()
+        model = build_model(nothing)
         instance = JuMPInstance(model)
         solver = LearningSolver(Cbc.Optimizer)
         solve!(solver, instance)
@@ -50,13 +50,12 @@ end
     end
 
     @testset "FileInstance" begin
-        model = build_model()
-        instance = JuMPInstance(model)
+        data = nothing
         filename = tempname()
-        save(filename, instance)
-        file_instance = FileInstance(filename, lazycb = (find_lazy, enforce_lazy))
+        MIPLearn.save_data(filename, data)
+        instance = FileInstance(filename, build_model)
         solver = LearningSolver(Cbc.Optimizer)
-        solve!(solver, file_instance)
+        solve!(solver, instance)
         h5 = MIPLearn.Hdf5Sample(filename)
         @test h5.get_array("mip_var_values") == [1.0, 0.0]
     end

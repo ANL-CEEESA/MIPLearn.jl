@@ -66,6 +66,7 @@ export DynamicLazyConstraintsComponent,
     ObjectiveValueComponent,
     PrimalSolutionComponent,
     StaticLazyConstraintsComponent,
-    MinPrecisionThreshold
+    MinPrecisionThreshold,
+    Hdf5Sample
 
 end # module

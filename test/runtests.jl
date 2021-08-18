@@ -13,5 +13,5 @@ MIPLearn.setup_logger()
     include("instance/jump_instance_test.jl")
     include("solvers/jump_solver_test.jl")
     include("solvers/learning_solver_test.jl")
-    include("utils/benchmark_test.jl")
+    # include("utils/benchmark_test.jl")
 end

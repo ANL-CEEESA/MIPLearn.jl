@@ -2,6 +2,7 @@
 #  Copyright (C) 2020-2021, UChicago Argonne, LLC. All rights reserved.
 #  Released under the modified BSD license. See COPYING.md for more details.
 
+using JLD2
 import Base: flush
 
 mutable struct FileInstance <: Instance
@@ -9,13 +10,13 @@ mutable struct FileInstance <: Instance
     loaded::Union{Nothing,JuMPInstance}
     filename::AbstractString
     h5::PyCall.PyObject
-    lazycb::Union{Nothing,Tuple{Function,Function}}
+    build_model::Function
 
     function FileInstance(
-        filename::AbstractString;
-        lazycb::Union{Nothing,Tuple{Function,Function}} = nothing,
+        filename::AbstractString,
+        build_model::Function,
     )::FileInstance
-        instance = new(nothing, nothing, filename, nothing, lazycb)
+        instance = new(nothing, nothing, filename, nothing, build_model)
         instance.py = PyFileInstance(instance)
         instance.h5 = Hdf5Sample(filename)
         instance.filename = filename
@@ -55,7 +56,8 @@ end
 
 function load(instance::FileInstance)
     if instance.loaded === nothing
-        instance.loaded = load_instance(instance.filename, lazycb = instance.lazycb)
+        data = load_data(instance.filename)
+        instance.loaded = JuMPInstance(instance.build_model(data))
     end
 end
 
@@ -63,6 +65,16 @@ function free(instance::FileInstance)
     instance.loaded.samples = []
     instance.loaded = nothing
     GC.gc()
+end
+
+function save_data(filename::AbstractString, data)::Nothing
+    jldsave(filename, data = data)
+end
+
+function load_data(filename::AbstractString)
+    jldopen(filename, "r") do file
+        return file["data"]
+    end
 end
 
 function flush(instance::FileInstance) end
