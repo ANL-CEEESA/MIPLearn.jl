@@ -29,6 +29,7 @@ include("solvers/jump_solver.jl")
 include("solvers/learning_solver.jl")
 include("solvers/macros.jl")
 include("utils/benchmark.jl")
+include("utils/parse.jl")
 
 function __init__()
     copy!(miplearn, pyimport("miplearn"))
