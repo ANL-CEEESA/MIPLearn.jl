@@ -21,7 +21,10 @@ mutable struct JuMPSolverData
     solution::Dict{JuMP.VariableRef,Float64}
     reduced_costs::Vector{Float64}
     dual_values::Dict{JuMP.ConstraintRef,Float64}
+    sensitivity_report::Any
     cb_data::Any
+    var_lb_constr::Dict{MOI.VariableIndex,ConstraintRef}
+    var_ub_constr::Dict{MOI.VariableIndex,ConstraintRef}
 end
 
 
@@ -54,7 +57,6 @@ function _update_solution!(data::JuMPSolverData)
     vars = JuMP.all_variables(data.model)
     data.solution = Dict(var => JuMP.value(var) for var in vars)
 
-    # Reduced costs
     if has_duals(data.model)
         data.reduced_costs = []
         for var in vars
@@ -77,11 +79,31 @@ function _update_solution!(data::JuMPSolverData)
             for constr in JuMP.all_constraints(data.model, ftype, stype)
                 # FIXME: Remove negative sign
                 data.dual_values[constr] = -JuMP.dual(constr)
+
+                if ftype == VariableRef
+                    var = MOI.get(data.model, MOI.ConstraintFunction(), constr).variable
+                    if stype == MOI.GreaterThan{Float64}
+                        data.var_lb_constr[var] = constr
+                    elseif stype == MOI.LessThan{Float64}
+                        data.var_ub_constr[var] = constr
+                    else
+                        error("Unsupported constraint: $(ftype)-in-$(stype)")
+                    end
+                end
             end
+        end
+
+        try
+            data.sensitivity_report = lp_sensitivity_report(data.model)
+        catch
+            # solver does not support sensitivity analysis; ignore
         end
     else
         data.reduced_costs = []
         data.dual_values = Dict()
+        data.sensitivity_report = nothing
+        data.var_lb_constr = Dict()
+        data.var_ub_constr = Dict()
     end
 end
 
@@ -329,7 +351,10 @@ end
 
 function get_variables(data::JuMPSolverData; with_static::Bool)
     vars = JuMP.all_variables(data.model)
-    lb, ub, types, obj_coeffs = nothing, nothing, nothing, nothing
+    lb, ub, types = nothing, nothing, nothing
+    sa_obj_down, sa_obj_up = nothing, nothing
+    sa_lb_down, sa_lb_up = nothing, nothing
+    sa_ub_down, sa_ub_up = nothing, nothing
     values, rc = nothing, nothing
 
     # Variable names
@@ -339,6 +364,10 @@ function get_variables(data::JuMPSolverData; with_static::Bool)
     if !isempty(data.solution)
         values = [data.solution[v] for v in vars]
     end
+
+    # Objective function coefficients
+    obj = objective_function(data.model)
+    obj_coeffs = [v ∈ keys(obj.terms) ? obj.terms[v] : 0.0 for v in vars]
 
     if with_static
         # Lower bounds
@@ -353,10 +382,42 @@ function get_variables(data::JuMPSolverData; with_static::Bool)
 
         # Variable types
         types = [JuMP.is_binary(v) ? "B" : JuMP.is_integer(v) ? "I" : "C" for v in vars]
+    end
 
-        # Objective function coefficients
-        obj = objective_function(data.model)
-        obj_coeffs = [v ∈ keys(obj.terms) ? obj.terms[v] : 0.0 for v in vars]
+    # Sensitivity analysis
+    if data.sensitivity_report !== nothing
+        sa_obj_down, sa_obj_up = Float64[], Float64[]
+        sa_lb_down, sa_lb_up = Float64[], Float64[]
+        sa_ub_down, sa_ub_up = Float64[], Float64[]
+
+        for (i, v) in enumerate(vars)
+            # Objective function
+            (delta_down, delta_up) = data.sensitivity_report[v]
+            push!(sa_obj_down, delta_down + obj_coeffs[i])
+            push!(sa_obj_up, delta_up + obj_coeffs[i])
+
+            # Lower bound
+            if v.index in keys(data.var_lb_constr)
+                constr = data.var_lb_constr[v.index]
+                (delta_down, delta_up) = data.sensitivity_report[constr]
+                push!(sa_lb_down, lower_bound(v) + delta_down)
+                push!(sa_lb_up, lower_bound(v) + delta_up)
+            else
+                push!(sa_lb_down, -Inf)
+                push!(sa_lb_up, -Inf)
+            end
+
+            # Upper bound
+            if v.index in keys(data.var_ub_constr)
+                constr = data.var_ub_constr[v.index]
+                (delta_down, delta_up) = data.sensitivity_report[constr]
+                push!(sa_ub_down, upper_bound(v) + delta_down)
+                push!(sa_ub_up, upper_bound(v) + delta_up)
+            else
+                push!(sa_ub_down, Inf)
+                push!(sa_ub_up, Inf)
+            end
+        end
     end
 
     rc = isempty(data.reduced_costs) ? nothing : data.reduced_costs
@@ -366,9 +427,15 @@ function get_variables(data::JuMPSolverData; with_static::Bool)
         lower_bounds = lb,
         upper_bounds = ub,
         types = to_str_array(types),
-        obj_coeffs = obj_coeffs,
+        obj_coeffs = with_static ? obj_coeffs : nothing,
         reduced_costs = rc,
         values = values,
+        sa_obj_down = sa_obj_down,
+        sa_obj_up = sa_obj_up,
+        sa_lb_down = sa_lb_down,
+        sa_lb_up = sa_lb_up,
+        sa_ub_down = sa_ub_down,
+        sa_ub_up = sa_ub_up,
     )
     return vf
 end
@@ -471,7 +538,10 @@ function __init_JuMPSolver__()
                 Dict(),  # solution
                 [],  # reduced_costs
                 Dict(),  # dual_values
+                nothing,  # sensitivity_report
                 nothing,  # cb_data
+                Dict(),  # var_lb_constr
+                Dict(),  # var_ub_constr
             )
         end
 
@@ -541,24 +611,34 @@ function __init_JuMPSolver__()
         get_variables(self; with_static = true, with_sa = true) =
             get_variables(self.data; with_static = with_static)
 
-        get_variable_attrs(self) = [
-            "names",
-            # "basis_status",
-            "categories",
-            "lower_bounds",
-            "obj_coeffs",
-            "reduced_costs",
-            # "sa_lb_down",
-            # "sa_lb_up",
-            # "sa_obj_down",
-            # "sa_obj_up",
-            # "sa_ub_down",
-            # "sa_ub_up",
-            "types",
-            "upper_bounds",
-            "user_features",
-            "values",
-        ]
+        function get_variable_attrs(self)
+            attrs = [
+                "names",
+                # "basis_status",
+                "categories",
+                "lower_bounds",
+                "obj_coeffs",
+                "reduced_costs",
+                "types",
+                "upper_bounds",
+                "user_features",
+                "values",
+            ]
+            if repr(self.data.optimizer_factory) in ["Gurobi.Optimizer"]
+                append!(
+                    attrs,
+                    [
+                        "sa_obj_down",
+                        "sa_obj_up",
+                        "sa_lb_down",
+                        "sa_lb_up",
+                        "sa_ub_down",
+                        "sa_ub_up",
+                    ],
+                )
+            end
+            return attrs
+        end
 
         is_infeasible(self) = is_infeasible(self.data)
 
