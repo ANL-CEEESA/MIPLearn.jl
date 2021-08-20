@@ -1,44 +1,33 @@
-#  MIPLearn: Extensible Framework for Learning-Enhanced Mixed-Integer Optimization
-#  Copyright (C) 2020-2021, UChicago Argonne, LLC. All rights reserved.
-#  Released under the modified BSD license. See COPYING.md for more details.
+# UnitCommitment.jl: Optimization Package for Security-Constrained Unit Commitment
+# Copyright (C) 2020, UChicago Argonne, LLC. All rights reserved.
+# Released under the modified BSD license. See COPYING.md for more details.
 
 using PackageCompiler
-
-using Cbc
-using Clp
-using Conda
-using CSV
-using DataFrames
-using Distributed
-using JLD2
-using JSON
-using JuMP
+using TOML
 using Logging
-using MathOptInterface
-using Printf
-using PyCall
-using TimerOutputs
 
-pkg = [
-    :Cbc
-    :Clp
-    :Conda
-    :CSV
-    :DataFrames
-    :Distributed
-    :JLD2
-    :JSON
-    :JuMP
-    :Logging
-    :MathOptInterface
-    :Printf
-    :PyCall
-    :TimerOutputs
-]
+Logging.disable_logging(Logging.Info)
+mkpath("build")
 
-@info "Building system image..."
+println("Generating precompilation statements...")
+run(`julia --project=. --trace-compile=build/precompile.jl $(ARGS)`)
+
+println("Finding dependencies...")
+project = TOML.parsefile("Project.toml")
+manifest = TOML.parsefile("Manifest.toml")
+deps = Symbol[]
+for dep in keys(project["deps"])
+    if "path" in keys(manifest[dep][1])
+        println("  - $(dep) [skip]")
+    else
+        println("  - $(dep)")
+        push!(deps, Symbol(dep))
+    end
+end
+
+println("Building system image...")
 create_sysimage(
-    pkg,
+    deps,
     precompile_statements_file = "build/precompile.jl",
     sysimage_path = "build/sysimage.so",
 )
