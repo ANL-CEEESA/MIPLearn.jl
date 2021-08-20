@@ -25,6 +25,7 @@ mutable struct JuMPSolverData
     cb_data::Any
     var_lb_constr::Dict{MOI.VariableIndex,ConstraintRef}
     var_ub_constr::Dict{MOI.VariableIndex,ConstraintRef}
+    basis_status::Dict{ConstraintRef,MOI.BasisStatusCode}
 end
 
 
@@ -59,6 +60,8 @@ function _update_solution!(data::JuMPSolverData)
 
     if has_duals(data.model)
         data.reduced_costs = []
+        data.basis_status = Dict()
+
         for var in vars
             rc = 0.0
             if has_upper_bound(var)
@@ -74,12 +77,25 @@ function _update_solution!(data::JuMPSolverData)
             push!(data.reduced_costs, rc)
         end
 
+        try
+            data.sensitivity_report = lp_sensitivity_report(data.model)
+        catch
+            # solver does not support sensitivity analysis; ignore
+        end
+
         data.dual_values = Dict()
         for (ftype, stype) in JuMP.list_of_constraint_types(data.model)
             for constr in JuMP.all_constraints(data.model, ftype, stype)
-                # FIXME: Remove negative sign
+                # Dual values (FIXME: Remove negative sign)
                 data.dual_values[constr] = -JuMP.dual(constr)
 
+                # Basis status
+                if data.sensitivity_report !== nothing
+                    data.basis_status[constr] =
+                        MOI.get(data.model, MOI.ConstraintBasisStatus(), constr)
+                end
+
+                # Build map between variables and bound constraints
                 if ftype == VariableRef
                     var = MOI.get(data.model, MOI.ConstraintFunction(), constr).variable
                     if stype == MOI.GreaterThan{Float64}
@@ -93,15 +109,11 @@ function _update_solution!(data::JuMPSolverData)
             end
         end
 
-        try
-            data.sensitivity_report = lp_sensitivity_report(data.model)
-        catch
-            # solver does not support sensitivity analysis; ignore
-        end
     else
         data.reduced_costs = []
         data.dual_values = Dict()
         data.sensitivity_report = nothing
+        data.basis_status = Dict()
         data.var_lb_constr = Dict()
         data.var_ub_constr = Dict()
     end
@@ -355,6 +367,7 @@ function get_variables(data::JuMPSolverData; with_static::Bool)
     sa_obj_down, sa_obj_up = nothing, nothing
     sa_lb_down, sa_lb_up = nothing, nothing
     sa_ub_down, sa_ub_up = nothing, nothing
+    basis_status = nothing
     values, rc = nothing, nothing
 
     # Variable names
@@ -384,13 +397,16 @@ function get_variables(data::JuMPSolverData; with_static::Bool)
         types = [JuMP.is_binary(v) ? "B" : JuMP.is_integer(v) ? "I" : "C" for v in vars]
     end
 
-    # Sensitivity analysis
+    # Sensitivity analysis and basis status
     if data.sensitivity_report !== nothing
         sa_obj_down, sa_obj_up = Float64[], Float64[]
         sa_lb_down, sa_lb_up = Float64[], Float64[]
         sa_ub_down, sa_ub_up = Float64[], Float64[]
+        basis_status = []
 
         for (i, v) in enumerate(vars)
+            basis_status_v = "B"
+
             # Objective function
             (delta_down, delta_up) = data.sensitivity_report[v]
             push!(sa_obj_down, delta_down + obj_coeffs[i])
@@ -402,6 +418,9 @@ function get_variables(data::JuMPSolverData; with_static::Bool)
                 (delta_down, delta_up) = data.sensitivity_report[constr]
                 push!(sa_lb_down, lower_bound(v) + delta_down)
                 push!(sa_lb_up, lower_bound(v) + delta_up)
+                if data.basis_status[constr] == MOI.NONBASIC
+                    basis_status_v = "L"
+                end
             else
                 push!(sa_lb_down, -Inf)
                 push!(sa_lb_up, -Inf)
@@ -413,10 +432,15 @@ function get_variables(data::JuMPSolverData; with_static::Bool)
                 (delta_down, delta_up) = data.sensitivity_report[constr]
                 push!(sa_ub_down, upper_bound(v) + delta_down)
                 push!(sa_ub_up, upper_bound(v) + delta_up)
+                if data.basis_status[constr] == MOI.NONBASIC
+                    basis_status_v = "U"
+                end
             else
                 push!(sa_ub_down, Inf)
                 push!(sa_ub_up, Inf)
             end
+
+            push!(basis_status, basis_status_v)
         end
     end
 
@@ -436,6 +460,7 @@ function get_variables(data::JuMPSolverData; with_static::Bool)
         sa_lb_up = sa_lb_up,
         sa_ub_down = sa_ub_down,
         sa_ub_up = sa_ub_up,
+        basis_status = to_str_array(basis_status),
     )
     return vf
 end
@@ -542,6 +567,7 @@ function __init_JuMPSolver__()
                 nothing,  # cb_data
                 Dict(),  # var_lb_constr
                 Dict(),  # var_ub_constr
+                Dict(),  # basis_status
             )
         end
 
@@ -614,7 +640,6 @@ function __init_JuMPSolver__()
         function get_variable_attrs(self)
             attrs = [
                 "names",
-                # "basis_status",
                 "categories",
                 "lower_bounds",
                 "obj_coeffs",
@@ -628,6 +653,7 @@ function __init_JuMPSolver__()
                 append!(
                     attrs,
                     [
+                        "basis_status",
                         "sa_obj_down",
                         "sa_obj_up",
                         "sa_lb_down",
