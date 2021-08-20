@@ -447,20 +447,20 @@ function get_variables(data::JuMPSolverData; with_static::Bool)
     rc = isempty(data.reduced_costs) ? nothing : data.reduced_costs
 
     vf = miplearn.solvers.internal.Variables(
-        names = to_str_array(names),
+        basis_status = to_str_array(basis_status),
         lower_bounds = lb,
-        upper_bounds = ub,
-        types = to_str_array(types),
+        names = to_str_array(names),
         obj_coeffs = with_static ? obj_coeffs : nothing,
         reduced_costs = rc,
-        values = values,
-        sa_obj_down = sa_obj_down,
-        sa_obj_up = sa_obj_up,
         sa_lb_down = sa_lb_down,
         sa_lb_up = sa_lb_up,
+        sa_obj_down = sa_obj_down,
+        sa_obj_up = sa_obj_up,
         sa_ub_down = sa_ub_down,
         sa_ub_up = sa_ub_up,
-        basis_status = to_str_array(basis_status),
+        types = to_str_array(types),
+        upper_bounds = ub,
+        values = values,
     )
     return vf
 end
@@ -475,9 +475,16 @@ function get_constraints(
     names = String[]
     senses, lhs, rhs = nothing, nothing, nothing
     dual_values = nothing
+    basis_status = nothing
+    sa_rhs_up, sa_rhs_down = nothing, nothing
 
     if !isempty(data.dual_values)
         dual_values = Float64[]
+    end
+
+    if !isempty(data.basis_status)
+        basis_status = []
+        sa_rhs_up, sa_rhs_down = Float64[], Float64[]
     end
 
     if with_static
@@ -489,14 +496,27 @@ function get_constraints(
             error("Unsupported constraint type: ($ftype, $stype)")
         for constr in JuMP.all_constraints(data.model, ftype, stype)
             cset = MOI.get(constr.model.moi_backend, MOI.ConstraintSet(), constr.index)
+
+            # Names
             name = JuMP.name(constr)
             length(name) > 0 || continue
             push!(names, name)
 
-            if !isempty(data.dual_values)
-                push!(dual_values, data.dual_values[constr])
+            # RHS and sense
+            if stype == MOI.EqualTo{Float64}
+                senses_c = "="
+                rhs_c = cset.value
+            elseif stype == MOI.LessThan{Float64}
+                senses_c = "<"
+                rhs_c = cset.upper
+            elseif stype == MOI.GreaterThan{Float64}
+                senses_c = ">"
+                rhs_c = cset.lower
+            else
+                error("Unsupported set: $stype")
             end
 
+            # LHS
             if with_static
                 if ftype == JuMP.AffExpr
                     if with_lhs
@@ -521,31 +541,48 @@ function get_constraints(
                             ],
                         )
                     end
-                    if stype == MOI.EqualTo{Float64}
-                        push!(senses, "=")
-                        push!(rhs, cset.value)
-                    elseif stype == MOI.LessThan{Float64}
-                        push!(senses, "<")
-                        push!(rhs, cset.upper)
-                    elseif stype == MOI.GreaterThan{Float64}
-                        push!(senses, ">")
-                        push!(rhs, cset.lower)
-                    else
-                        error("Unsupported set: $stype")
-                    end
+                    push!(senses, senses_c)
+                    push!(rhs, rhs_c)
                 else
                     error("Unsupported ftype: $ftype")
                 end
             end
+
+            # Dual values
+            if !isempty(data.dual_values)
+                push!(dual_values, data.dual_values[constr])
+            end
+
+            if !isempty(data.basis_status)
+                # Basis status
+                b = data.basis_status[constr]
+                if b == MOI.NONBASIC
+                    push!(basis_status, "N")
+                elseif b == MOI.BASIC
+                    push!(basis_status, "B")
+                else
+                    error("Unknown basis status: $b")
+                end
+
+                # Sensitivity analysis
+                (delta_down, delta_up) = data.sensitivity_report[constr]
+                push!(sa_rhs_down, rhs_c + delta_down)
+                push!(sa_rhs_up, rhs_c + delta_up)
+            end
+
+
         end
     end
 
     return miplearn.solvers.internal.Constraints(
-        names = to_str_array(names),
-        senses = to_str_array(senses),
-        lhs = lhs,
-        rhs = rhs,
+        basis_status = to_str_array(basis_status),
         dual_values = dual_values,
+        lhs = lhs,
+        names = to_str_array(names),
+        rhs = rhs,
+        sa_rhs_down = sa_rhs_down,
+        sa_rhs_up = sa_rhs_up,
+        senses = to_str_array(senses),
     )
 end
 
@@ -619,20 +656,27 @@ function __init_JuMPSolver__()
                 with_lhs = with_lhs,
             )
 
-        get_constraint_attrs(self) = [
-            # "basis_status",
-            "categories",
-            "dual_values",
-            "lazy",
-            "lhs",
-            "names",
-            "rhs",
-            # "sa_rhs_down",
-            # "sa_rhs_up",
-            "senses",
-            # "slacks",
-            "user_features",
-        ]
+        function get_constraint_attrs(self)
+            attrs = [
+                "categories",
+                "dual_values",
+                "lazy",
+                "lhs",
+                "names",
+                "rhs",
+                "senses",
+                "user_features",
+            ]
+            if repr(self.data.optimizer_factory) in ["Gurobi.Optimizer"]
+                append!(attrs, [
+                    "basis_status",
+                    "sa_rhs_down",
+                    "sa_rhs_up",
+                    # "slacks",
+                ])
+            end
+            return attrs
+        end
 
         get_variables(self; with_static = true, with_sa = true) =
             get_variables(self.data; with_static = with_static)
