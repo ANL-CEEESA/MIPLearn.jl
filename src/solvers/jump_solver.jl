@@ -144,6 +144,8 @@ function add_constraints(
         set_name(constr, names[i])
         data.cname_to_constr[names[i]] = constr
     end
+    data.solution = Dict()
+    data.x = Float64[]
     return
 end
 
@@ -240,6 +242,7 @@ function solve(
 
     if is_infeasible(data)
         data.solution = Dict()
+        data.x = Float64[]
         primal_bound = nothing
         dual_bound = nothing
     else
@@ -470,8 +473,8 @@ function get_constraints(
 )
     names = String[]
     senses, rhs = String[], Float64[]
-    lhs_rows, lhs_cols, lhs_values = nothing, nothing, nothing
-    dual_values = nothing
+    lhs_rows, lhs_cols, lhs_values = Int[], Int[], Float64[]
+    dual_values, slacks = nothing, nothing
     basis_status = nothing
     sa_rhs_up, sa_rhs_down = nothing, nothing
 
@@ -482,12 +485,6 @@ function get_constraints(
     if !isempty(data.basis_status)
         basis_status = []
         sa_rhs_up, sa_rhs_down = Float64[], Float64[]
-    end
-
-    if with_lhs
-        lhs_rows = Int[]
-        lhs_cols = Int[]
-        lhs_values = Float64[]
     end
 
     constr_index = 1
@@ -518,14 +515,12 @@ function get_constraints(
                     error("Unsupported set: $stype")
                 end
                 push!(rhs, rhs_c)
-                if with_lhs
-                    for term in cf.terms
-                        push!(lhs_cols, term.variable_index.value)
-                        push!(lhs_rows, constr_index)
-                        push!(lhs_values, term.coefficient)
-                    end
-                    constr_index += 1
+                for term in cf.terms
+                    push!(lhs_cols, term.variable_index.value)
+                    push!(lhs_rows, constr_index)
+                    push!(lhs_values, term.coefficient)
                 end
+                constr_index += 1
             else
                 error("Unsupported constraint type: ($ftype, $stype)")
             end
@@ -554,6 +549,12 @@ function get_constraints(
         end
     end
 
+    lhs = sparse(lhs_rows, lhs_cols, lhs_values)
+    if !isempty(data.x)
+        lhs_value = lhs * data.x
+        slacks = abs.(lhs_value - rhs)
+    end
+
     return miplearn.solvers.internal.Constraints(
         basis_status = to_str_array(basis_status),
         dual_values = dual_values,
@@ -563,6 +564,7 @@ function get_constraints(
         sa_rhs_down = sa_rhs_down,
         sa_rhs_up = sa_rhs_up,
         senses = with_static ? to_str_array(senses) : nothing,
+        slacks = slacks,
     )
 end
 
@@ -621,13 +623,13 @@ function __init_JuMPSolver__()
                 "rhs",
                 "senses",
                 "user_features",
+                "slacks",
             ]
             if repr(self.data.optimizer_factory) in ["Gurobi.Optimizer"]
                 append!(attrs, [
                     "basis_status",
                     "sa_rhs_down",
                     "sa_rhs_up",
-                    # "slacks",
                 ])
             end
             return attrs
