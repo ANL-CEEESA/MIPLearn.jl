@@ -7,25 +7,27 @@ using Clp
 using JuMP
 using MathOptInterface
 using TimerOutputs
+using SparseArrays
 const MOI = MathOptInterface
 
 import JuMP: value
 
-mutable struct JuMPSolverData
+Base.@kwdef mutable struct JuMPSolverData
     optimizer_factory::Any
-    varname_to_var::Dict{String,VariableRef}
-    cname_to_constr::Dict{String,JuMP.ConstraintRef}
-    instance::Union{Nothing,PyObject}
-    model::Union{Nothing,JuMP.Model}
-    bin_vars::Vector{JuMP.VariableRef}
-    solution::Dict{JuMP.VariableRef,Float64}
-    reduced_costs::Vector{Float64}
-    dual_values::Dict{JuMP.ConstraintRef,Float64}
-    sensitivity_report::Any
-    cb_data::Any
-    var_lb_constr::Dict{MOI.VariableIndex,ConstraintRef}
-    var_ub_constr::Dict{MOI.VariableIndex,ConstraintRef}
-    basis_status::Dict{ConstraintRef,MOI.BasisStatusCode}
+    basis_status::Dict{ConstraintRef,MOI.BasisStatusCode} = Dict()
+    bin_vars::Vector{JuMP.VariableRef} = []
+    cb_data::Any = nothing
+    cname_to_constr::Dict{String,JuMP.ConstraintRef} = Dict()
+    dual_values::Dict{JuMP.ConstraintRef,Float64} = Dict()
+    instance::Union{Nothing,PyObject} = nothing
+    model::Union{Nothing,JuMP.Model} = nothing
+    reduced_costs::Vector{Float64} = []
+    sensitivity_report::Any = nothing
+    solution::Dict{JuMP.VariableRef,Float64} = Dict()
+    var_lb_constr::Dict{MOI.VariableIndex,ConstraintRef} = Dict()
+    var_ub_constr::Dict{MOI.VariableIndex,ConstraintRef} = Dict()
+    varname_to_var::Dict{String,VariableRef} = Dict()
+    x::Vector{Float64} = Float64[]
 end
 
 
@@ -57,6 +59,7 @@ end
 function _update_solution!(data::JuMPSolverData)
     vars = JuMP.all_variables(data.model)
     data.solution = Dict(var => JuMP.value(var) for var in vars)
+    data.x = JuMP.value.(vars)
 
     if has_duals(data.model)
         data.reduced_costs = []
@@ -122,25 +125,21 @@ end
 
 function add_constraints(
     data::JuMPSolverData;
-    lhs::Vector{Vector{Tuple{String,Float64}}},
+    lhs::SparseMatrixCSC,
     rhs::Vector{Float64},
     senses::Vector{String},
     names::Vector{String},
 )::Nothing
-    for (i, sense) in enumerate(senses)
-        lhs_expr = AffExpr(0.0)
-        for (varname, coeff) in lhs[i]
-            var = data.varname_to_var[varname]
-            add_to_expression!(lhs_expr, var, coeff)
-        end
-        if sense == "<"
-            constr = @constraint(data.model, lhs_expr <= rhs[i])
-        elseif sense == ">"
+    lhs_exprs = lhs * JuMP.all_variables(data.model)
+    for (i, lhs_expr) in enumerate(lhs_exprs)
+        if senses[i] == ">"
             constr = @constraint(data.model, lhs_expr >= rhs[i])
-        elseif sense == "="
+        elseif senses[i] == "<"
+            constr = @constraint(data.model, lhs_expr <= rhs[i])
+        elseif senses[i] == "="
             constr = @constraint(data.model, lhs_expr == rhs[i])
         else
-            error("unknown sense: $(sense)")
+            error("unknown sense: $sense")
         end
         set_name(constr, names[i])
         data.cname_to_constr[names[i]] = constr
@@ -151,26 +150,23 @@ end
 
 function are_constraints_satisfied(
     data::JuMPSolverData;
-    lhs::Vector{Vector{Tuple{String,Float64}}},
+    lhs::SparseMatrixCSC,
     rhs::Vector{Float64},
     senses::Vector{String},
     tol::Float64 = 1e-5,
 )::Vector{Bool}
-    result = []
+    result = Bool[]
+    lhs_value = lhs * data.x
     for (i, sense) in enumerate(senses)
-        lhs_value = 0.0
-        for (varname, coeff) in lhs[i]
-            var = data.varname_to_var[varname]
-            lhs_value += data.solution[var] * coeff
-        end
+        sense = senses[i]
         if sense == "<"
-            push!(result, lhs_value <= rhs[i] + tol)
+            push!(result, lhs_value[i] <= rhs[i] + tol)
         elseif sense == ">"
-            push!(result, lhs_value >= rhs[i] - tol)
-        elseif sense == "="
-            push!(result, abs(lhs_value - rhs[i]) <= tol)
+            push!(result, lhs_value[i] >= rhs[i] - tol)
+        elseif sense == "<"
+            push!(result, abs(rhs[i] - lhs_value[i]) <= tol)
         else
-            error("unknown sense: $(sense)")
+            error("unknown sense: $sense")
         end
     end
     return result
@@ -473,7 +469,8 @@ function get_constraints(
     with_lhs::Bool,
 )
     names = String[]
-    senses, lhs, rhs = nothing, nothing, nothing
+    senses, rhs = String[], Float64[]
+    lhs_rows, lhs_cols, lhs_values = nothing, nothing, nothing
     dual_values = nothing
     basis_status = nothing
     sa_rhs_up, sa_rhs_down = nothing, nothing
@@ -487,65 +484,50 @@ function get_constraints(
         sa_rhs_up, sa_rhs_down = Float64[], Float64[]
     end
 
-    if with_static
-        senses, lhs, rhs = String[], [], Float64[]
+    if with_lhs
+        lhs_rows = Int[]
+        lhs_cols = Int[]
+        lhs_values = Float64[]
     end
 
+    constr_index = 1
     for (ftype, stype) in JuMP.list_of_constraint_types(data.model)
-        ftype in [JuMP.AffExpr, JuMP.VariableRef] ||
-            error("Unsupported constraint type: ($ftype, $stype)")
         for constr in JuMP.all_constraints(data.model, ftype, stype)
             cset = MOI.get(constr.model.moi_backend, MOI.ConstraintSet(), constr.index)
+            cf = MOI.get(constr.model.moi_backend, MOI.ConstraintFunction(), constr.index)
 
             # Names
             name = JuMP.name(constr)
             length(name) > 0 || continue
             push!(names, name)
 
-            # RHS and sense
-            if stype == MOI.EqualTo{Float64}
-                senses_c = "="
-                rhs_c = cset.value
-            elseif stype == MOI.LessThan{Float64}
-                senses_c = "<"
-                rhs_c = cset.upper
-            elseif stype == MOI.GreaterThan{Float64}
-                senses_c = ">"
-                rhs_c = cset.lower
-            else
-                error("Unsupported set: $stype")
-            end
-
-            # LHS
-            if with_static
-                if ftype == JuMP.AffExpr
-                    if with_lhs
-                        push!(
-                            lhs,
-                            [
-                                (
-                                    pybytes(
-                                        MOI.get(
-                                            constr.model.moi_backend,
-                                            MOI.VariableName(),
-                                            term.variable_index,
-                                        ),
-                                    ),
-                                    term.coefficient,
-                                ) for term in
-                                MOI.get(
-                                    constr.model.moi_backend,
-                                    MOI.ConstraintFunction(),
-                                    constr.index,
-                                ).terms
-                            ],
-                        )
-                    end
-                    push!(senses, senses_c)
-                    push!(rhs, rhs_c)
+            # LHS, RHS and sense
+            if ftype == VariableRef
+                # nop
+            elseif ftype == AffExpr
+                if stype == MOI.EqualTo{Float64}
+                    rhs_c = cset.value
+                    push!(senses, "=")
+                elseif stype == MOI.LessThan{Float64}
+                    rhs_c = cset.upper
+                    push!(senses, "<")
+                elseif stype == MOI.GreaterThan{Float64}
+                    rhs_c = cset.lower
+                    push!(senses, ">")
                 else
-                    error("Unsupported ftype: $ftype")
+                    error("Unsupported set: $stype")
                 end
+                push!(rhs, rhs_c)
+                if with_lhs
+                    for term in cf.terms
+                        push!(lhs_cols, term.variable_index.value)
+                        push!(lhs_rows, constr_index)
+                        push!(lhs_values, term.coefficient)
+                    end
+                    constr_index += 1
+                end
+            else
+                error("Unsupported constraint type: ($ftype, $stype)")
             end
 
             # Dual values
@@ -569,20 +551,18 @@ function get_constraints(
                 push!(sa_rhs_down, rhs_c + delta_down)
                 push!(sa_rhs_up, rhs_c + delta_up)
             end
-
-
         end
     end
 
     return miplearn.solvers.internal.Constraints(
         basis_status = to_str_array(basis_status),
         dual_values = dual_values,
-        lhs = lhs,
+        lhs = (with_static && with_lhs) ? sparse(lhs_rows, lhs_cols, lhs_values) : nothing,
         names = to_str_array(names),
-        rhs = rhs,
+        rhs = with_static ? rhs : nothing,
         sa_rhs_down = sa_rhs_down,
         sa_rhs_up = sa_rhs_up,
-        senses = to_str_array(senses),
+        senses = with_static ? to_str_array(senses) : nothing,
     )
 end
 
@@ -590,33 +570,13 @@ end
 function __init_JuMPSolver__()
     @pydef mutable struct Class <: miplearn.solvers.internal.InternalSolver
         function __init__(self, optimizer_factory)
-            self.data = JuMPSolverData(
-                optimizer_factory,
-                Dict(),  # varname_to_var
-                Dict(),  # cname_to_constr
-                nothing,  # instance
-                nothing,  # model
-                [],  # bin_vars
-                Dict(),  # solution
-                [],  # reduced_costs
-                Dict(),  # dual_values
-                nothing,  # sensitivity_report
-                nothing,  # cb_data
-                Dict(),  # var_lb_constr
-                Dict(),  # var_ub_constr
-                Dict(),  # basis_status
-            )
+            self.data = JuMPSolverData(optimizer_factory = optimizer_factory)
         end
 
         function add_constraints(self, cf)
-            lhs = cf.lhs
-            if lhs isa Matrix
-                # Undo incorrect automatic conversion performed by PyCall
-                lhs = [col[:] for col in eachcol(lhs)]
-            end
             add_constraints(
                 self.data,
-                lhs = lhs,
+                lhs = convert(SparseMatrixCSC, cf.lhs),
                 rhs = cf.rhs,
                 senses = from_str_array(cf.senses),
                 names = from_str_array(cf.names),
@@ -624,14 +584,9 @@ function __init_JuMPSolver__()
         end
 
         function are_constraints_satisfied(self, cf; tol = 1e-5)
-            lhs = cf.lhs
-            if lhs isa Matrix
-                # Undo incorrect automatic conversion performed by PyCall
-                lhs = [col[:] for col in eachcol(lhs)]
-            end
             return are_constraints_satisfied(
                 self.data,
-                lhs = lhs,
+                lhs = convert(SparseMatrixCSC, cf.lhs),
                 rhs = cf.rhs,
                 senses = from_str_array(cf.senses),
                 tol = tol,
