@@ -83,9 +83,10 @@ function _update_solution!(data::JuMPSolverData)
         try
             data.sensitivity_report = lp_sensitivity_report(data.model)
         catch
-            # solver does not support sensitivity analysis; ignore
+            @warn("Sensitivity analysis is unavailable; ignoring")
         end
 
+        basis_status_supported = true
         data.dual_values = Dict()
         for (ftype, stype) in JuMP.list_of_constraint_types(data.model)
             for constr in JuMP.all_constraints(data.model, ftype, stype)
@@ -93,9 +94,15 @@ function _update_solution!(data::JuMPSolverData)
                 data.dual_values[constr] = -JuMP.dual(constr)
 
                 # Basis status
-                if data.sensitivity_report !== nothing
-                    data.basis_status[constr] =
-                        MOI.get(data.model, MOI.ConstraintBasisStatus(), constr)
+                if basis_status_supported
+                    try
+                        data.basis_status[constr] =
+                            MOI.get(data.model, MOI.ConstraintBasisStatus(), constr)
+                    catch
+                        @warn "Basis status is unavailable; ignoring"
+                        basis_status_supported = false
+                        data.basis_status = Dict()
+                    end
                 end
 
                 # Build map between variables and bound constraints
@@ -360,7 +367,7 @@ function is_infeasible(data::JuMPSolverData)
 end
 
 
-function get_variables(data::JuMPSolverData; with_static::Bool)
+function get_variables(data::JuMPSolverData; with_static::Bool, with_sa::Bool)
     vars = JuMP.all_variables(data.model)
     lb, ub, types = nothing, nothing, nothing
     sa_obj_down, sa_obj_up = nothing, nothing
@@ -396,16 +403,13 @@ function get_variables(data::JuMPSolverData; with_static::Bool)
         types = [JuMP.is_binary(v) ? "B" : JuMP.is_integer(v) ? "I" : "C" for v in vars]
     end
 
-    # Sensitivity analysis and basis status
+    # Sensitivity analysis
     if data.sensitivity_report !== nothing
         sa_obj_down, sa_obj_up = Float64[], Float64[]
         sa_lb_down, sa_lb_up = Float64[], Float64[]
         sa_ub_down, sa_ub_up = Float64[], Float64[]
-        basis_status = []
 
         for (i, v) in enumerate(vars)
-            basis_status_v = "B"
-
             # Objective function
             (delta_down, delta_up) = data.sensitivity_report[v]
             push!(sa_obj_down, delta_down + obj_coeffs[i])
@@ -417,9 +421,6 @@ function get_variables(data::JuMPSolverData; with_static::Bool)
                 (delta_down, delta_up) = data.sensitivity_report[constr]
                 push!(sa_lb_down, lower_bound(v) + delta_down)
                 push!(sa_lb_up, lower_bound(v) + delta_up)
-                if data.basis_status[constr] == MOI.NONBASIC
-                    basis_status_v = "L"
-                end
             else
                 push!(sa_lb_down, -Inf)
                 push!(sa_lb_up, -Inf)
@@ -431,14 +432,30 @@ function get_variables(data::JuMPSolverData; with_static::Bool)
                 (delta_down, delta_up) = data.sensitivity_report[constr]
                 push!(sa_ub_down, upper_bound(v) + delta_down)
                 push!(sa_ub_up, upper_bound(v) + delta_up)
-                if data.basis_status[constr] == MOI.NONBASIC
-                    basis_status_v = "U"
-                end
             else
                 push!(sa_ub_down, Inf)
                 push!(sa_ub_up, Inf)
             end
+        end
+    end
 
+    # Basis status
+    if !isempty(data.basis_status)
+        basis_status = []
+        for v in vars
+            basis_status_v = "B"
+            if v.index in keys(data.var_lb_constr)
+                constr = data.var_lb_constr[v.index]
+                if data.basis_status[constr] == MOI.NONBASIC
+                    basis_status_v = "L"
+                end
+            end
+            if v.index in keys(data.var_ub_constr)
+                constr = data.var_ub_constr[v.index]
+                if data.basis_status[constr] == MOI.NONBASIC
+                    basis_status_v = "U"
+                end
+            end
             push!(basis_status, basis_status_v)
         end
     end
@@ -451,12 +468,12 @@ function get_variables(data::JuMPSolverData; with_static::Bool)
         names = to_str_array(names),
         obj_coeffs = with_static ? obj_coeffs : nothing,
         reduced_costs = rc,
-        sa_lb_down = sa_lb_down,
-        sa_lb_up = sa_lb_up,
-        sa_obj_down = sa_obj_down,
-        sa_obj_up = sa_obj_up,
-        sa_ub_down = sa_ub_down,
-        sa_ub_up = sa_ub_up,
+        sa_lb_down = with_sa ? sa_lb_down : nothing,
+        sa_lb_up = with_sa ? sa_lb_up : nothing,
+        sa_obj_down = with_sa ? sa_obj_down : nothing,
+        sa_obj_up = with_sa ? sa_obj_up : nothing,
+        sa_ub_down = with_sa ? sa_ub_down : nothing,
+        sa_ub_up = with_sa ? sa_ub_up : nothing,
         types = to_str_array(types),
         upper_bounds = ub,
         values = values,
@@ -481,9 +498,10 @@ function get_constraints(
     if !isempty(data.dual_values)
         dual_values = Float64[]
     end
-
     if !isempty(data.basis_status)
         basis_status = []
+    end
+    if data.sensitivity_report !== nothing
         sa_rhs_up, sa_rhs_down = Float64[], Float64[]
     end
 
@@ -530,8 +548,8 @@ function get_constraints(
                 push!(dual_values, data.dual_values[constr])
             end
 
+            # Basis status
             if !isempty(data.basis_status)
-                # Basis status
                 b = data.basis_status[constr]
                 if b == MOI.NONBASIC
                     push!(basis_status, "N")
@@ -540,8 +558,10 @@ function get_constraints(
                 else
                     error("Unknown basis status: $b")
                 end
+            end
 
-                # Sensitivity analysis
+            # Sensitivity analysis
+            if data.sensitivity_report !== nothing
                 (delta_down, delta_up) = data.sensitivity_report[constr]
                 push!(sa_rhs_down, rhs_c + delta_down)
                 push!(sa_rhs_up, rhs_c + delta_up)
@@ -549,7 +569,13 @@ function get_constraints(
         end
     end
 
-    lhs = sparse(lhs_rows, lhs_cols, lhs_values)
+    lhs = sparse(
+        lhs_rows,
+        lhs_cols,
+        lhs_values,
+        length(rhs),
+        JuMP.num_variables(data.model),
+    )
     if !isempty(data.x)
         lhs_value = lhs * data.x
         slacks = abs.(lhs_value - rhs)
@@ -561,8 +587,8 @@ function get_constraints(
         lhs = (with_static && with_lhs) ? sparse(lhs_rows, lhs_cols, lhs_values) : nothing,
         names = to_str_array(names),
         rhs = with_static ? rhs : nothing,
-        sa_rhs_down = sa_rhs_down,
-        sa_rhs_up = sa_rhs_up,
+        sa_rhs_down = with_sa ? sa_rhs_down : nothing,
+        sa_rhs_up = with_sa ? sa_rhs_up : nothing,
         senses = with_static ? to_str_array(senses) : nothing,
         slacks = slacks,
     )
@@ -636,7 +662,7 @@ function __init_JuMPSolver__()
         end
 
         get_variables(self; with_static = true, with_sa = true) =
-            get_variables(self.data; with_static = with_static)
+            get_variables(self.data; with_static = with_static, with_sa = with_sa)
 
         function get_variable_attrs(self)
             attrs = [
