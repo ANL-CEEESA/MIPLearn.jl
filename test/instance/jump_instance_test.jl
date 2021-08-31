@@ -56,7 +56,7 @@ end
         instance = FileInstance(filename, build_model)
         solver = LearningSolver(Cbc.Optimizer)
         solve!(solver, instance)
-        h5 = MIPLearn.Hdf5Sample(filename)
+        h5 = MIPLearn.Hdf5Sample("$filename.h5")
         @test h5.get_array("mip_var_values") == [1.0, 0.0]
     end
 end

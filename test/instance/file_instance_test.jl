@@ -15,7 +15,7 @@ using Cbc
         solver = LearningSolver(Cbc.Optimizer)
         solve!(solver, instance)
 
-        h5 = Hdf5Sample(filename)
+        h5 = Hdf5Sample("$filename.h5")
         @test h5.get_scalar("mip_wallclock_time") > 0
     end
 
