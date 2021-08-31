@@ -569,13 +569,8 @@ function get_constraints(
         end
     end
 
-    lhs = sparse(
-        lhs_rows,
-        lhs_cols,
-        lhs_values,
-        length(rhs),
-        JuMP.num_variables(data.model),
-    )
+    lhs =
+        sparse(lhs_rows, lhs_cols, lhs_values, length(rhs), JuMP.num_variables(data.model))
     if !isempty(data.x)
         lhs_value = lhs * data.x
         slacks = abs.(lhs_value - rhs)
@@ -652,11 +647,7 @@ function __init_JuMPSolver__()
                 "slacks",
             ]
             if repr(self.data.optimizer_factory) in ["Gurobi.Optimizer"]
-                append!(attrs, [
-                    "basis_status",
-                    "sa_rhs_down",
-                    "sa_rhs_up",
-                ])
+                append!(attrs, ["basis_status", "sa_rhs_down", "sa_rhs_up"])
             end
             return attrs
         end

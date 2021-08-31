@@ -15,7 +15,7 @@ mutable struct FileInstance <: Instance
     function FileInstance(filename::AbstractString, build_model::Function)::FileInstance
         instance = new(nothing, nothing, filename, nothing, build_model)
         instance.py = PyFileInstance(instance)
-        instance.h5 = Hdf5Sample("$filename.h5", mode="a")
+        instance.h5 = Hdf5Sample("$filename.h5", mode = "a")
         instance.filename = filename
         return instance
     end

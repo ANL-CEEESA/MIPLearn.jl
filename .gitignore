@@ -10,3 +10,4 @@ docs/build/
 docs/site/
 .ipy*
 build/
+**/Manifest.toml
