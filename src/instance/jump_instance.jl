@@ -5,41 +5,26 @@
 using JuMP
 import JSON
 
-mutable struct JuMPInstance <: Instance
-    py::Union{Nothing,PyCall.PyObject}
-    model::Union{Nothing,JuMP.Model}
-    mps::Union{Nothing,Vector{UInt8}}
-    ext::AbstractDict
-    samples::Vector{PyCall.PyObject}
+Base.@kwdef mutable struct JuMPInstance <: Instance
+    py::Union{Nothing,PyCall.PyObject} = nothing
+    model::Union{Nothing,JuMP.Model} = nothing
+    samples::Vector{PyCall.PyObject} = []
 
     function JuMPInstance(model::JuMP.Model)::JuMPInstance
         init_miplearn_ext(model)
-        instance = new(nothing, model, nothing, model.ext[:miplearn], [])
+        instance = new(nothing, model, [])
         py = PyJuMPInstance(instance)
         instance.py = py
-        return instance
-    end
-
-    function JuMPInstance(mps::Vector{UInt8}, ext::AbstractDict)
-        "instance_features" in keys(ext) || error("provided ext is not initialized")
-        instance = new(nothing, nothing, mps, ext, [])
-        instance.py = PyJuMPInstance(instance)
         return instance
     end
 end
 
 function to_model(instance::JuMPInstance)::JuMP.Model
-    if instance.model === nothing
-        mps_filename = "$(tempname()).mps.gz"
-        write(mps_filename, instance.mps)
-        instance.model = read_from_file(mps_filename)
-        instance.model.ext[:miplearn] = instance.ext
-    end
     return instance.model
 end
 
 function get_instance_features(instance::JuMPInstance)::Union{Vector{Float64},Nothing}
-    return instance.ext["instance_features"]
+    return instance.model.ext[:miplearn]["instance_features"]
 end
 
 function _concat_features(dict, names)::Matrix{Float64}
@@ -58,22 +43,22 @@ function get_variable_features(
     instance::JuMPInstance,
     names::Vector{String},
 )::Matrix{Float64}
-    return _concat_features(instance.ext["variable_features"], names)
+    return _concat_features(instance.model.ext[:miplearn]["variable_features"], names)
 end
 
 function get_variable_categories(instance::JuMPInstance, names::Vector{String})
-    return _concat_categories(instance.ext["variable_categories"], names)
+    return _concat_categories(instance.model.ext[:miplearn]["variable_categories"], names)
 end
 
 function get_constraint_features(
     instance::JuMPInstance,
     names::Vector{String},
 )::Matrix{Float64}
-    return _concat_features(instance.ext["constraint_features"], names)
+    return _concat_features(instance.model.ext[:miplearn]["constraint_features"], names)
 end
 
 function get_constraint_categories(instance::JuMPInstance, names::Vector{String})
-    return _concat_categories(instance.ext["constraint_categories"], names)
+    return _concat_categories(instance.model.ext[:miplearn]["constraint_categories"], names)
 end
 
 get_samples(instance::JuMPInstance) = instance.samples
@@ -94,6 +79,10 @@ end
 
 function enforce_lazy_constraint(instance::JuMPInstance, solver, violation::String)::Nothing
     instance.model.ext[:miplearn]["lazy_enforce_cb"](instance.model, solver.data, violation)
+end
+
+function solve!(solver::LearningSolver, model::JuMP.Model; kwargs...)
+    solve!(solver, JuMPInstance(model); kwargs...)
 end
 
 function __init_PyJuMPInstance__()

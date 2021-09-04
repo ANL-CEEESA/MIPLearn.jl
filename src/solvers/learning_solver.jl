@@ -6,12 +6,6 @@ using Distributed
 using JLD2
 
 
-struct LearningSolver
-    py::PyCall.PyObject
-    optimizer_factory::Any
-end
-
-
 function LearningSolver(
     optimizer_factory;
     components = nothing,
@@ -49,39 +43,9 @@ function solve!(
     )
 end
 
-
 function fit!(solver::LearningSolver, instances::Vector{<:Instance})
     @python_call solver.py.fit([instance.py for instance in instances])
     return
-end
-
-
-function _solve(solver_filename, instance_filename; discard_output::Bool)
-    @info "solve $instance_filename"
-    solver = load_solver(solver_filename)
-    solver.py._silence_miplearn_logger()
-    stats = solve!(solver, FileInstance(instance_filename), discard_output = discard_output)
-    solver.py._restore_miplearn_logger()
-    GC.gc()
-    @info "solve $instance_filename [done]"
-    return stats
-end
-
-
-function parallel_solve!(
-    solver::LearningSolver,
-    instances::Vector{FileInstance};
-    discard_output::Bool = false,
-)
-    instance_filenames = [instance.filename for instance in instances]
-    solver_filename = tempname()
-    save(solver_filename, solver)
-    return pmap(
-        instance_filename ->
-            _solve(solver_filename, instance_filename, discard_output = discard_output),
-        instance_filenames,
-        on_error = identity,
-    )
 end
 
 

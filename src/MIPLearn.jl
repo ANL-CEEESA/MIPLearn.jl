@@ -20,6 +20,8 @@ global UserCutsComponent = PyNULL()
 global MemorySample = PyNULL()
 global Hdf5Sample = PyNULL()
 
+include("solvers/structs.jl")
+
 include("utils/log.jl")
 include("utils/exceptions.jl")
 include("instance/abstract_instance.jl")

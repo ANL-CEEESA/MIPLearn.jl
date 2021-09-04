@@ -22,15 +22,18 @@ mutable struct BenchmarkRunner
     end
 end
 
-function parallel_solve!(
+function solve!(
     runner::BenchmarkRunner,
     instances::Vector{FileInstance};
-    n_trials::Int = 3,
+    n_trials::Int = 1,
 )::Nothing
     instances = repeat(instances, n_trials)
     for (solver_name, solver) in runner.solvers
         @info "benchmark $solver_name"
-        stats = parallel_solve!(solver, instances, discard_output = true)
+        stats = [
+            solve!(solver, instance, discard_output = true, tee = true) for
+            instance in instances
+        ]
         for (i, s) in enumerate(stats)
             s["Solver"] = solver_name
             s["Instance"] = instances[i].filename
@@ -54,4 +57,4 @@ function write_csv!(runner::BenchmarkRunner, filename::AbstractString)::Nothing
     return
 end
 
-export BenchmarkRunner, parallel_solve!, fit!, write_csv!
+export BenchmarkRunner, solve!, fit!, write_csv!
