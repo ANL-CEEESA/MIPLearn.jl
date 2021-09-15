@@ -83,7 +83,7 @@ function _update_solution!(data::JuMPSolverData)
         try
             data.sensitivity_report = lp_sensitivity_report(data.model)
         catch
-            @warn "Sensitivity analysis is unavailable; ignoring" maxlog=1
+            @warn "Sensitivity analysis is unavailable; ignoring" maxlog = 1
         end
 
         basis_status_supported = true
@@ -99,7 +99,7 @@ function _update_solution!(data::JuMPSolverData)
                         data.basis_status[constr] =
                             MOI.get(data.model, MOI.ConstraintBasisStatus(), constr)
                     catch
-                        @warn "Basis status is unavailable; ignoring" maxlog=1
+                        @warn "Basis status is unavailable; ignoring" maxlog = 1
                         basis_status_supported = false
                         data.basis_status = Dict()
                     end
