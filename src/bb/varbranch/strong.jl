@@ -67,7 +67,7 @@ function _strong_branch_score(;
     try
         obj_up, obj_down = probe(node.mip, var)
     catch
-        @warn "strong branch error" var=var
+        @warn "strong branch error" var = var
     end
     obj_change_up = obj_up - node.obj
     obj_change_down = obj_down - node.obj

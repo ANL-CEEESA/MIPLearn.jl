@@ -43,10 +43,7 @@ function find_branching_var(
         else
             if var in keys(pool.var_history)
                 varhist = pool.var_history[var]
-                hlength = min(
-                    length(varhist.obj_ratio_up),
-                    length(varhist.obj_ratio_down),
-                )
+                hlength = min(length(varhist.obj_ratio_up), length(varhist.obj_ratio_down))
                 if hlength >= rule.min_samples
                     use_strong_branch = false
                 end

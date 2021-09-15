@@ -7,14 +7,25 @@ using MIPLearn
 using Cbc
 
 @testset "FileInstance" begin
-    @testset "Solve" begin
+    @testset "Solve (knapsack)" begin
         data = KnapsackData()
         filename = tempname()
         MIPLearn.save_data(filename, data)
         instance = FileInstance(filename, build_knapsack_model)
         solver = LearningSolver(Cbc.Optimizer)
         solve!(solver, instance)
+        h5 = Hdf5Sample("$filename.h5")
+        @test h5.get_scalar("mip_wallclock_time") > 0
+    end
 
+    @testset "Solve (vpm2)" begin
+        data = Dict("filename" => joinpath(@__DIR__, "../fixtures/danoint.mps.gz"))
+        build_model(data) = read_from_file(data["filename"])
+        filename = tempname()
+        MIPLearn.save_data(filename, data)
+        instance = FileInstance(filename, build_model)
+        solver = LearningSolver(optimizer_with_attributes(Cbc.Optimizer, "seconds" => 1.0))
+        solve!(solver, instance)
         h5 = Hdf5Sample("$filename.h5")
         @test h5.get_scalar("mip_wallclock_time") > 0
     end

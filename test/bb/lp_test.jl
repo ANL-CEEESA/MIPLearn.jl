@@ -51,12 +51,7 @@ function runtests(optimizer_name, optimizer; large = true)
             @test round(obj, digits = 6) == 62.714777
 
             # Probe (up is infeasible, down is feasible)
-            BB.set_bounds!(
-                mip,
-                mip.binary_variables[1:3],
-                [1.0, 1.0, 0.0],
-                [1.0, 1.0, 1.0],
-            )
+            BB.set_bounds!(mip, mip.binary_variables[1:3], [1.0, 1.0, 0.0], [1.0, 1.0, 1.0])
             status, obj = BB.solve_relaxation!(mip)
             @test status == :Optimal
             probe_up, probe_down = BB.probe(mip, mip.binary_variables[3])

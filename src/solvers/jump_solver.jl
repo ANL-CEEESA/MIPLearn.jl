@@ -16,6 +16,7 @@ Base.@kwdef mutable struct JuMPSolverData
     optimizer_factory::Any
     basis_status::Dict{ConstraintRef,MOI.BasisStatusCode} = Dict()
     bin_vars::Vector{JuMP.VariableRef} = []
+    int_vars::Vector{JuMP.VariableRef} = []
     cb_data::Any = nothing
     cname_to_constr::Dict{String,JuMP.ConstraintRef} = Dict()
     dual_values::Dict{JuMP.ConstraintRef,Float64} = Dict()
@@ -24,8 +25,6 @@ Base.@kwdef mutable struct JuMPSolverData
     reduced_costs::Vector{Float64} = []
     sensitivity_report::Any = nothing
     solution::Dict{JuMP.VariableRef,Float64} = Dict()
-    var_lb_constr::Dict{MOI.VariableIndex,ConstraintRef} = Dict()
-    var_ub_constr::Dict{MOI.VariableIndex,ConstraintRef} = Dict()
     varname_to_var::Dict{String,VariableRef} = Dict()
     x::Vector{Float64} = Float64[]
 end
@@ -104,18 +103,6 @@ function _update_solution!(data::JuMPSolverData)
                         data.basis_status = Dict()
                     end
                 end
-
-                # Build map between variables and bound constraints
-                if ftype == VariableRef
-                    var = MOI.get(data.model, MOI.ConstraintFunction(), constr).variable
-                    if stype == MOI.GreaterThan{Float64}
-                        data.var_lb_constr[var] = constr
-                    elseif stype == MOI.LessThan{Float64}
-                        data.var_ub_constr[var] = constr
-                    else
-                        error("Unsupported constraint: $(ftype)-in-$(stype)")
-                    end
-                end
             end
         end
 
@@ -124,8 +111,6 @@ function _update_solution!(data::JuMPSolverData)
         data.dual_values = Dict()
         data.sensitivity_report = nothing
         data.basis_status = Dict()
-        data.var_lb_constr = Dict()
-        data.var_ub_constr = Dict()
     end
 end
 
@@ -282,36 +267,43 @@ end
 
 
 function solve_lp(data::JuMPSolverData; tee::Bool = false)
-    model, bin_vars = data.model, data.bin_vars
-    for var in bin_vars
+    for var in data.bin_vars
         ~is_fixed(var) || continue
         unset_binary(var)
         set_upper_bound(var, 1.0)
         set_lower_bound(var, 0.0)
+    end
+    for var in data.int_vars
+        ~is_fixed(var) || continue
+        unset_integer(var)
     end
     # If the optimizer is Cbc, we need to replace it by Clp,
     # otherwise dual values are not available.
     # https://github.com/jump-dev/Cbc.jl/issues/50
     is_cbc = (data.optimizer_factory == Cbc.Optimizer)
     if is_cbc
-        set_optimizer(model, Clp.Optimizer)
+        set_optimizer(data.model, Clp.Optimizer)
     end
     wallclock_time = @elapsed begin
-        log = _optimize_and_capture_output!(model, tee = tee)
+        log = _optimize_and_capture_output!(data.model, tee = tee)
     end
     if is_infeasible(data)
         data.solution = Dict()
         obj_value = nothing
     else
         _update_solution!(data)
-        obj_value = objective_value(model)
+        obj_value = objective_value(data.model)
     end
     if is_cbc
-        set_optimizer(model, data.optimizer_factory)
+        set_optimizer(data.model, data.optimizer_factory)
     end
-    for var in bin_vars
+    for var in data.bin_vars
         ~is_fixed(var) || continue
         set_binary(var)
+    end
+    for var in data.int_vars
+        ~is_fixed(var) || continue
+        set_integer(var)
     end
     return miplearn.solvers.internal.LPSolveStats(
         lp_value = obj_value,
@@ -332,6 +324,7 @@ function set_instance!(
     end
     data.model = model
     data.bin_vars = [var for var in JuMP.all_variables(model) if JuMP.is_binary(var)]
+    data.int_vars = [var for var in JuMP.all_variables(model) if JuMP.is_integer(var)]
     data.varname_to_var = Dict(JuMP.name(var) => var for var in JuMP.all_variables(model))
     JuMP.set_optimizer(model, data.optimizer_factory)
     data.cname_to_constr = Dict()
@@ -419,8 +412,8 @@ function get_variables(data::JuMPSolverData; with_static::Bool, with_sa::Bool)
             push!(sa_obj_up, delta_up + obj_coeffs[i])
 
             # Lower bound
-            if v.index in keys(data.var_lb_constr)
-                constr = data.var_lb_constr[v.index]
+            if has_lower_bound(v)
+                constr = LowerBoundRef(v)
                 (delta_down, delta_up) = data.sensitivity_report[constr]
                 push!(sa_lb_down, lower_bound(v) + delta_down)
                 push!(sa_lb_up, lower_bound(v) + delta_up)
@@ -430,8 +423,8 @@ function get_variables(data::JuMPSolverData; with_static::Bool, with_sa::Bool)
             end
 
             # Upper bound
-            if v.index in keys(data.var_ub_constr)
-                constr = data.var_ub_constr[v.index]
+            if has_upper_bound(v)
+                constr = JuMP.UpperBoundRef(v)
                 (delta_down, delta_up) = data.sensitivity_report[constr]
                 push!(sa_ub_down, upper_bound(v) + delta_down)
                 push!(sa_ub_up, upper_bound(v) + delta_up)
@@ -447,14 +440,14 @@ function get_variables(data::JuMPSolverData; with_static::Bool, with_sa::Bool)
         basis_status = []
         for v in vars
             basis_status_v = "B"
-            if v.index in keys(data.var_lb_constr)
-                constr = data.var_lb_constr[v.index]
+            if has_lower_bound(v)
+                constr = LowerBoundRef(v)
                 if data.basis_status[constr] == MOI.NONBASIC
                     basis_status_v = "L"
                 end
             end
-            if v.index in keys(data.var_ub_constr)
-                constr = data.var_ub_constr[v.index]
+            if has_upper_bound(v)
+                constr = UpperBoundRef(v)
                 if data.basis_status[constr] == MOI.NONBASIC
                     basis_status_v = "U"
                 end

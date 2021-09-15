@@ -10,7 +10,7 @@ struct Variable
 end
 
 mutable struct MIP
-    constructor
+    constructor::Any
     optimizers::Vector
     binary_variables::Vector{Variable}
     sense::Float64
