@@ -33,6 +33,8 @@ include("solvers/macros.jl")
 include("utils/benchmark.jl")
 include("utils/parse.jl")
 
+include("bb/BB.jl")
+
 function __init__()
     copy!(miplearn, pyimport("miplearn"))
     copy!(traceback, pyimport("traceback"))

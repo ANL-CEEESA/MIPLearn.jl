@@ -8,7 +8,6 @@ using MIPLearn
 using PyCall
 using Test
 
-const is_gurobi_available = ("GUROBI_HOME" in keys(ENV))
 if is_gurobi_available
     using Gurobi
 end

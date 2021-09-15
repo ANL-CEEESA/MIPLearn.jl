@@ -6,6 +6,7 @@ using Test
 using MIPLearn
 
 MIPLearn.setup_logger()
+const is_gurobi_available = ("GUROBI_HOME" in keys(ENV))
 
 @testset "MIPLearn" begin
     include("fixtures/knapsack.jl")
@@ -15,4 +16,5 @@ MIPLearn.setup_logger()
     include("solvers/learning_solver_test.jl")
     # include("utils/benchmark_test.jl")
     include("utils/parse_test.jl")
+    include("bb/lp_test.jl")
 end
