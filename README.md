@@ -11,7 +11,7 @@
   </a>
 </p>
 
-**MIPLearn** is an extensible open-source framework for solving discrete optimization problems using a combination of Mixed-Integer Linear Programming (MIP) and Machine Learning (ML). See the [main repository](https://github.com/ANL-CEEESA/MIPLearn) for more information. This repository holds an experimental Julia interface for the package.
+**MIPLearn** is an extensible open-source framework for solving discrete optimization problems using a combination of Mixed-Integer Linear Programming (MIP) and Machine Learning (ML). See the [main repository](https://github.com/ANL-CEEESA/MIPLearn) for more information. This repository holds an experimental Julia interface for the package. See [getting started tutorial](https://github.com/ANL-CEEESA/MIPLearn.jl/blob/dev/docs/getting-started.ipynb).
 
 [miplearn]: https://github.com/ANL-CEEESA/MIPLearn
 
