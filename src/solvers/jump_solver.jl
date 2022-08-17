@@ -14,7 +14,7 @@ import JuMP: value
 
 Base.@kwdef mutable struct JuMPSolverData
     optimizer_factory::Any
-    basis_status::Dict{ConstraintRef,MOI.BasisStatusCode} = Dict()
+    basis_status::Dict = Dict()
     bin_vars::Vector{JuMP.VariableRef} = []
     int_vars::Vector{JuMP.VariableRef} = []
     cb_data::Any = nothing
@@ -64,6 +64,7 @@ function _update_solution!(data::JuMPSolverData)
         data.reduced_costs = []
         data.basis_status = Dict()
 
+        # Reduced costs
         for var in vars
             rc = 0.0
             if has_upper_bound(var)
@@ -77,6 +78,13 @@ function _update_solution!(data::JuMPSolverData)
                 rc += shadow_price(FixRef(var))
             end
             push!(data.reduced_costs, rc)
+            
+            # Basis status
+            data.basis_status[var] = MOI.get(
+                data.model,
+                MOI.VariableBasisStatus(),
+                var,
+            )
         end
 
         try
@@ -85,27 +93,18 @@ function _update_solution!(data::JuMPSolverData)
             @warn "Sensitivity analysis is unavailable; ignoring" maxlog = 1
         end
 
-        basis_status_supported = true
         data.dual_values = Dict()
         for (ftype, stype) in JuMP.list_of_constraint_types(data.model)
+            ftype != VariableRef || continue
             for constr in JuMP.all_constraints(data.model, ftype, stype)
                 # Dual values (FIXME: Remove negative sign)
                 data.dual_values[constr] = -JuMP.dual(constr)
 
                 # Basis status
-                if basis_status_supported
-                    try
-                        data.basis_status[constr] =
-                            MOI.get(data.model, MOI.ConstraintBasisStatus(), constr)
-                    catch
-                        @warn "Basis status is unavailable; ignoring" maxlog = 1
-                        basis_status_supported = false
-                        data.basis_status = Dict()
-                    end
-                end
+                data.basis_status[constr] =
+                    MOI.get(data.model, MOI.ConstraintBasisStatus(), constr)
             end
         end
-
     else
         data.reduced_costs = []
         data.dual_values = Dict()
@@ -439,18 +438,15 @@ function get_variables(data::JuMPSolverData; with_static::Bool, with_sa::Bool)
     if !isempty(data.basis_status)
         basis_status = []
         for v in vars
-            basis_status_v = "B"
-            if has_lower_bound(v)
-                constr = LowerBoundRef(v)
-                if data.basis_status[constr] == MOI.NONBASIC
-                    basis_status_v = "L"
-                end
-            end
-            if has_upper_bound(v)
-                constr = UpperBoundRef(v)
-                if data.basis_status[constr] == MOI.NONBASIC
-                    basis_status_v = "U"
-                end
+            bstatus = data.basis_status[v]
+            if bstatus == MOI.BASIC
+                basis_status_v = "B"
+            elseif bstatus == MOI.NONBASIC_AT_LOWER
+                basis_status_v = "L"
+            elseif bstatus == MOI.NONBASIC_AT_UPPER
+                basis_status_v = "U"
+            else
+                error("Unknown basis status: $(bstatus)")
             end
             push!(basis_status, basis_status_v)
         end
@@ -530,7 +526,7 @@ function get_constraints(
                 end
                 push!(rhs, rhs_c)
                 for term in cf.terms
-                    push!(lhs_cols, term.variable_index.value)
+                    push!(lhs_cols, term.variable.value)
                     push!(lhs_rows, constr_index)
                     push!(lhs_values, term.coefficient)
                 end
@@ -631,7 +627,7 @@ function __init_JuMPSolver__()
             )
 
         function get_constraint_attrs(self)
-            attrs = [
+            return [
                 "categories",
                 "dual_values",
                 "lazy",
@@ -641,18 +637,18 @@ function __init_JuMPSolver__()
                 "senses",
                 "user_features",
                 "slacks",
+                "basis_status",
+                "sa_rhs_down",
+                "sa_rhs_up",
             ]
-            if repr(self.data.optimizer_factory) in ["Gurobi.Optimizer"]
-                append!(attrs, ["basis_status", "sa_rhs_down", "sa_rhs_up"])
-            end
-            return attrs
         end
 
         get_variables(self; with_static = true, with_sa = true) =
             get_variables(self.data; with_static = with_static, with_sa = with_sa)
 
         function get_variable_attrs(self)
-            attrs = [
+            return [
+                "basis_status",
                 "names",
                 "categories",
                 "lower_bounds",
@@ -662,22 +658,13 @@ function __init_JuMPSolver__()
                 "upper_bounds",
                 "user_features",
                 "values",
+                "sa_obj_down",
+                "sa_obj_up",
+                "sa_lb_down",
+                "sa_lb_up",
+                "sa_ub_down",
+                "sa_ub_up",
             ]
-            if repr(self.data.optimizer_factory) in ["Gurobi.Optimizer"]
-                append!(
-                    attrs,
-                    [
-                        "basis_status",
-                        "sa_obj_down",
-                        "sa_obj_up",
-                        "sa_lb_down",
-                        "sa_lb_up",
-                        "sa_ub_down",
-                        "sa_ub_up",
-                    ],
-                )
-            end
-            return attrs
         end
 
         is_infeasible(self) = is_infeasible(self.data)

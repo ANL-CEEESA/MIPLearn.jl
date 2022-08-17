@@ -16,6 +16,7 @@ end
 function read!(mip::MIP, filename::AbstractString)::Nothing
     @threads for t = 1:nthreads()
         model = read_from_file(filename)
+        set_optimizer(model, mip.constructor)
         mip.optimizers[t] = backend(model)
         _replace_zero_one!(mip.optimizers[t])
         if t == 1
@@ -24,21 +25,20 @@ function read!(mip::MIP, filename::AbstractString)::Nothing
             mip.sense = _get_objective_sense(mip.optimizers[t])
         end
         _relax_integrality!(mip.optimizers[t])
-        set_optimizer(model, mip.constructor)
         set_silent(model)
     end
     return
 end
 
 function _assert_supported(optimizer::MOI.AbstractOptimizer)::Nothing
-    types = MOI.get(optimizer, MOI.ListOfConstraints())
+    types = MOI.get(optimizer, MOI.ListOfConstraintTypesPresent())
     for (F, S) in types
         _assert_supported(F, S)
     end
 end
 
-function _assert_supported(F::DataType, S::DataType)::Nothing
-    if F in [MOI.ScalarAffineFunction{Float64}, MOI.SingleVariable] && S in [
+function _assert_supported(F::Type, S::Type)::Nothing
+    if F in [MOI.ScalarAffineFunction{Float64}, MOI.VariableIndex] && S in [
         MOI.LessThan{Float64},
         MOI.GreaterThan{Float64},
         MOI.EqualTo{Float64},
@@ -46,7 +46,7 @@ function _assert_supported(F::DataType, S::DataType)::Nothing
     ]
         return
     end
-    if F in [MOI.SingleVariable] && S in [MOI.Integer, MOI.ZeroOne]
+    if F in [MOI.VariableIndex] && S in [MOI.Integer, MOI.ZeroOne]
         return
     end
     error("MOI constraint not supported: $F in $S")
@@ -64,19 +64,19 @@ function _get_objective_sense(optimizer::MOI.AbstractOptimizer)::Float64
 end
 
 _bounds_constraint(v::Variable) =
-    MOI.ConstraintIndex{MOI.SingleVariable,MOI.Interval{Float64}}(v.index)
+    MOI.ConstraintIndex{MOI.VariableIndex,MOI.Interval{Float64}}(v.index)
 
 function _replace_zero_one!(optimizer::MOI.AbstractOptimizer)::Nothing
     constrs_to_delete = MOI.ConstraintIndex[]
-    funcs = MOI.SingleVariable[]
+    funcs = MOI.VariableIndex[]
     sets = Union{MOI.Interval,MOI.Integer}[]
     for ci in
-        MOI.get(optimizer, MOI.ListOfConstraintIndices{MOI.SingleVariable,MOI.ZeroOne}())
+        MOI.get(optimizer, MOI.ListOfConstraintIndices{MOI.VariableIndex,MOI.ZeroOne}())
         func = MOI.get(optimizer, MOI.ConstraintFunction(), ci)
-        var = func.variable
+        var = func.value
         push!(constrs_to_delete, ci)
-        push!(funcs, MOI.SingleVariable(var))
-        push!(funcs, MOI.SingleVariable(var))
+        push!(funcs, MOI.VariableIndex(var))
+        push!(funcs, MOI.VariableIndex(var))
         push!(sets, MOI.Interval{Float64}(0.0, 1.0))
         push!(sets, MOI.Integer())
     end
@@ -88,9 +88,9 @@ end
 function _get_binary_variables(optimizer::MOI.AbstractOptimizer)::Vector{Variable}
     vars = Variable[]
     for ci in
-        MOI.get(optimizer, MOI.ListOfConstraintIndices{MOI.SingleVariable,MOI.Integer}())
+        MOI.get(optimizer, MOI.ListOfConstraintIndices{MOI.VariableIndex,MOI.Integer}())
         func = MOI.get(optimizer, MOI.ConstraintFunction(), ci)
-        var = Variable(func.variable.value)
+        var = Variable(func.value)
 
         MOI.is_valid(optimizer, _bounds_constraint(var)) ||
             error("$var is not interval-constrained")
@@ -105,7 +105,7 @@ end
 
 function _relax_integrality!(optimizer::MOI.AbstractOptimizer)::Nothing
     indices =
-        MOI.get(optimizer, MOI.ListOfConstraintIndices{MOI.SingleVariable,MOI.Integer}())
+        MOI.get(optimizer, MOI.ListOfConstraintIndices{MOI.VariableIndex,MOI.Integer}())
     MOI.delete(optimizer, indices)
 end
 
@@ -146,7 +146,7 @@ function values(mip::MIP, vars::Vector{Variable})::Array{Float64}
     return MOI.get(
         mip.optimizers[threadid()],
         MOI.VariablePrimal(),
-        convert.(MOI.VariableIndex, vars),
+        [MOI.VariableIndex(v.index) for v in vars],
     )
 end
 
@@ -170,10 +170,10 @@ function set_bounds!(
 )::Nothing
     t = threadid()
     MOI.delete(mip.optimizers[t], _bounds_constraint.(vars))
-    funcs = MOI.SingleVariable[]
+    funcs = MOI.VariableIndex[]
     sets = MOI.Interval[]
     for j = 1:length(vars)
-        push!(funcs, MOI.SingleVariable(vars[j]))
+        push!(funcs, MOI.VariableIndex(vars[j].index))
         push!(sets, MOI.Interval(lb[j], ub[j]))
     end
     MOI.add_constraints(mip.optimizers[t], funcs, sets)
@@ -187,7 +187,7 @@ Return the name of the decision variable `var`.
 """
 function name(mip::MIP, var::Variable)::String
     t = threadid()
-    return MOI.get(mip.optimizers[t], MOI.VariableName(), convert(MOI.VariableIndex, var))
+    return MOI.get(mip.optimizers[t], MOI.VariableName(), MOI.VariableIndex(var.index))
 end
 
 convert(::Type{MOI.VariableIndex}, v::Variable) = MOI.VariableIndex(v.index)
