@@ -15,6 +15,7 @@ function solve!(
     initial_primal_bound::Float64 = Inf,
     detailed_output::Bool = false,
     branch_rule::VariableBranchingRule = HybridBranching(),
+    enable_plunging = true,
 )::NodePool
     time_initial = time()
     pool = NodePool(mip = mip)
@@ -34,7 +35,7 @@ function solve!(
         child_one, child_zero, suggestions = nothing, nothing, Node[]
         while true
             time_elapsed = time() - time_initial
-            if child_one !== nothing
+            if enable_plunging && (child_one !== nothing)
                 suggestions = Node[child_one, child_zero]
             end
             node = take(
