@@ -6,27 +6,22 @@ using Printf
 
 function print_progress_header(; detailed_output::Bool)
     @printf(
-        "%8s  %9s %9s %13s %13s %13s %9s %8s",
+        "%8s %9s %9s %13s %13s %9s %6s %13s %6s %-24s %9s %9s %6s %6s",
         "time",
-        "visited",
+        "processed",
         "pending",
-        "obj",
         "primal-bound",
         "dual-bound",
         "gap",
-        "lp-iter"
+        "node",
+        "obj",
+        "parent",
+        "branch-var",
+        "branch-lb",
+        "branch-ub",
+        "depth",
+        "iinfes"
     )
-    if detailed_output
-        @printf(
-            " %6s %6s %-24s %6s %6s %6s",
-            "node",
-            "parent",
-            "branch-var",
-            "b-val",
-            "depth",
-            "iinfes"
-        )
-    end
     println()
     flush(stdout)
 end
@@ -39,40 +34,35 @@ function print_progress(
     detailed_output::Bool,
     primal_update::Bool,
 )::Nothing
-    prefix = primal_update ? "*" : " "
     if (pool.processed % print_interval == 0) || isempty(pool.pending) || primal_update
+        if isempty(node.branch_vars)
+            branch_var_name = "---"
+            branch_lb = "---"
+            branch_ub = "---"
+        else
+            branch_var_name = name(node.mip, last(node.branch_vars))
+            L = min(24, length(branch_var_name))
+            branch_var_name = branch_var_name[1:L]
+            branch_lb = @sprintf("%9.2f", last(node.branch_lb))
+            branch_ub = @sprintf("%9.2f", last(node.branch_ub))
+        end
         @printf(
-            "%8.2f %1s%9d %9d %13.6e %13.6e %13.6e %9.2e %8d",
+            "%8.2f %9d %9d %13.6e %13.6e %9.2e %6d %13.6e %6s %-24s %9s %9s %6d %6d",
             time_elapsed,
-            prefix,
             pool.processed,
             length(pool.processing) + length(pool.pending),
-            node.obj * node.mip.sense,
             pool.primal_bound * node.mip.sense,
             pool.dual_bound * node.mip.sense,
             pool.gap,
-            pool.mip.lp_iterations,
+            node.index,
+            node.obj * node.mip.sense,
+            node.parent === nothing ? "---" : @sprintf("%d", node.parent.index),
+            branch_var_name,
+            branch_lb,
+            branch_ub,
+            length(node.branch_vars),
+            length(node.fractional_variables)
         )
-        if detailed_output
-            if isempty(node.branch_variables)
-                branch_var_name = "---"
-                branch_value = "---"
-            else
-                branch_var_name = name(node.mip, last(node.branch_variables))
-                L = min(24, length(branch_var_name))
-                branch_var_name = branch_var_name[1:L]
-                branch_value = @sprintf("%.2f", last(node.branch_values))
-            end
-            @printf(
-                " %6d %6s %-24s %6s %6d %6d",
-                node.index,
-                node.parent === nothing ? "---" : @sprintf("%d", node.parent.index),
-                branch_var_name,
-                branch_value,
-                length(node.branch_variables),
-                length(node.fractional_variables)
-            )
-        end
         println()
         flush(stdout)
     end

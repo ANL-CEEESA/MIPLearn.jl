@@ -12,7 +12,9 @@ end
 mutable struct MIP
     constructor::Any
     optimizers::Vector
-    binary_variables::Vector{Variable}
+    int_vars::Vector{Variable}
+    int_vars_lb::Vector{Float64}
+    int_vars_ub::Vector{Float64}
     sense::Float64
     lp_iterations::Int64
 end
@@ -23,8 +25,9 @@ struct Node
     depth::Int
     obj::Float64
     status::Symbol
-    branch_variables::Array{Variable}
-    branch_values::Array{Float64}
+    branch_vars::Array{Variable}
+    branch_lb::Array{Float64}
+    branch_ub::Array{Float64}
     fractional_variables::Array{Variable}
     fractional_values::Array{Float64}
     parent::Union{Nothing,Node}

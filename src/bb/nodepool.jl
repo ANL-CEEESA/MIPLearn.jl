@@ -61,8 +61,8 @@ function offer(
         primal_update = false
 
         # Update node.processing and node.processed
-        pool.processed += 1
         if parent_node !== nothing
+            pool.processed += 1
             delete!(pool.processing, parent_node)
         end
 
@@ -71,7 +71,7 @@ function offer(
             if node.status == :Infeasible
                 continue
             end
-            if node.obj >= pool.primal_bound
+            if node.obj >= pool.primal_bound - 1e-6
                 continue
             end
             if isempty(node.fractional_variables)
@@ -100,7 +100,7 @@ function offer(
 
         if parent_node !== nothing
             # Update branching variable history
-            branch_var = child_nodes[1].branch_variables[end]
+            branch_var = child_nodes[1].branch_vars[end]
             offset = findfirst(isequal(branch_var), parent_node.fractional_variables)
             x = parent_node.fractional_values[offset]
             obj_change_up = child_nodes[1].obj - parent_node.obj
@@ -112,21 +112,21 @@ function offer(
                 obj_change_down = obj_change_down,
                 obj_change_up = obj_change_up,
             )
-
             # Update global history
             pool.history.avg_pseudocost_up =
                 mean(vh.pseudocost_up for vh in values(pool.var_history))
             pool.history.avg_pseudocost_down =
                 mean(vh.pseudocost_down for vh in values(pool.var_history))
+        end
 
-            # Print progress
+        for node in child_nodes
             print_progress(
                 pool,
-                parent_node,
+                node,
                 time_elapsed = time_elapsed,
                 print_interval = print_interval,
                 detailed_output = detailed_output,
-                primal_update = primal_update,
+                primal_update = isfinite(node.obj) && isempty(node.fractional_variables),
             )
         end
     end

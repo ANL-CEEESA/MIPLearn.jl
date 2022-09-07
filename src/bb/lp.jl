@@ -10,21 +10,36 @@ using MathOptInterface
 const MOI = MathOptInterface
 
 function init(constructor)::MIP
-    return MIP(constructor, Any[nothing for t = 1:nthreads()], Variable[], 1.0, 0)
+    return MIP(
+        constructor,
+        Any[nothing for t = 1:nthreads()],
+        Variable[],
+        Float64[],
+        Float64[],
+        1.0,
+        0,
+    )
 end
 
 function read!(mip::MIP, filename::AbstractString)::Nothing
+    load!(mip, read_from_file(filename))
+    return
+end
+
+function load!(mip::MIP, prototype::JuMP.Model)
     @threads for t = 1:nthreads()
-        model = read_from_file(filename)
+        model = Model()
+        MOI.copy_to(model, backend(prototype))
+        _replace_zero_one!(backend(model))
+        if t == 1
+            _assert_supported(backend(model))
+            mip.int_vars, mip.int_vars_lb, mip.int_vars_ub =
+                _get_int_variables(backend(model))
+            mip.sense = _get_objective_sense(backend(model))
+        end
+        _relax_integrality!(backend(model))
         set_optimizer(model, mip.constructor)
         mip.optimizers[t] = backend(model)
-        _replace_zero_one!(mip.optimizers[t])
-        if t == 1
-            _assert_supported(mip.optimizers[t])
-            mip.binary_variables = _get_binary_variables(mip.optimizers[t])
-            mip.sense = _get_objective_sense(mip.optimizers[t])
-        end
-        _relax_integrality!(mip.optimizers[t])
         set_silent(model)
     end
     return
@@ -63,8 +78,15 @@ function _get_objective_sense(optimizer::MOI.AbstractOptimizer)::Float64
     end
 end
 
-_bounds_constraint(v::Variable) =
+_interval_index(v::Variable) =
     MOI.ConstraintIndex{MOI.VariableIndex,MOI.Interval{Float64}}(v.index)
+
+_lower_bound_index(v::Variable) =
+    MOI.ConstraintIndex{MOI.VariableIndex,MOI.GreaterThan{Float64}}(v.index)
+
+_upper_bound_index(v::Variable) =
+    MOI.ConstraintIndex{MOI.VariableIndex,MOI.LessThan{Float64}}(v.index)
+
 
 function _replace_zero_one!(optimizer::MOI.AbstractOptimizer)::Nothing
     constrs_to_delete = MOI.ConstraintIndex[]
@@ -85,22 +107,46 @@ function _replace_zero_one!(optimizer::MOI.AbstractOptimizer)::Nothing
     return
 end
 
-function _get_binary_variables(optimizer::MOI.AbstractOptimizer)::Vector{Variable}
+function _get_int_variables(
+    optimizer::MOI.AbstractOptimizer,
+)::Tuple{Vector{Variable},Vector{Float64},Vector{Float64}}
     vars = Variable[]
+    lb = Float64[]
+    ub = Float64[]
     for ci in
         MOI.get(optimizer, MOI.ListOfConstraintIndices{MOI.VariableIndex,MOI.Integer}())
         func = MOI.get(optimizer, MOI.ConstraintFunction(), ci)
         var = Variable(func.value)
 
-        MOI.is_valid(optimizer, _bounds_constraint(var)) ||
-            error("$var is not interval-constrained")
-        interval = MOI.get(optimizer, MOI.ConstraintSet(), _bounds_constraint(var))
-        interval.lower == 0.0 || error("$var has lb != 0")
-        interval.upper == 1.0 || error("$var has ub != 1")
-
+        var_lb, var_ub = -Inf, Inf
+        if MOI.is_valid(optimizer, _interval_index(var))
+            constr = MOI.get(optimizer, MOI.ConstraintSet(), _interval_index(var))
+            var_ub = constr.upper
+            var_lb = constr.lower
+        else
+            # If interval constraint is not found, query individual lower/upper bound
+            # constraints and replace them by an interval constraint.
+            if MOI.is_valid(optimizer, _lower_bound_index(var))
+                constr = MOI.get(optimizer, MOI.ConstraintSet(), _lower_bound_index(var))
+                var_lb = constr.lower
+                MOI.delete(optimizer, _lower_bound_index(var))
+            end
+            if MOI.is_valid(optimizer, _upper_bound_index(var))
+                constr = MOI.get(optimizer, MOI.ConstraintSet(), _upper_bound_index(var))
+                var_ub = constr.upper
+                MOI.delete(optimizer, _upper_bound_index(var))
+            end
+            MOI.add_constraint(
+                optimizer,
+                var,
+                MOI.Interval(var_lb, var_ub),
+            )
+        end
         push!(vars, var)
+        push!(lb, var_lb)
+        push!(ub, var_ub)
     end
-    return vars
+    return vars, lb, ub
 end
 
 function _relax_integrality!(optimizer::MOI.AbstractOptimizer)::Nothing
@@ -169,14 +215,14 @@ function set_bounds!(
     ub::Array{Float64},
 )::Nothing
     t = threadid()
-    MOI.delete(mip.optimizers[t], _bounds_constraint.(vars))
-    funcs = MOI.VariableIndex[]
-    sets = MOI.Interval[]
     for j = 1:length(vars)
-        push!(funcs, MOI.VariableIndex(vars[j].index))
-        push!(sets, MOI.Interval(lb[j], ub[j]))
+        MOI.delete(mip.optimizers[t], _interval_index(vars[j]))
+        MOI.add_constraint(
+            mip.optimizers[t],
+            MOI.VariableIndex(vars[j].index),
+            MOI.Interval(lb[j], ub[j]),
+        )
     end
-    MOI.add_constraints(mip.optimizers[t], funcs, sets)
     return
 end
 
@@ -190,23 +236,23 @@ function name(mip::MIP, var::Variable)::String
     return MOI.get(mip.optimizers[t], MOI.VariableName(), MOI.VariableIndex(var.index))
 end
 
-convert(::Type{MOI.VariableIndex}, v::Variable) = MOI.VariableIndex(v.index)
+# convert(::Type{MOI.VariableIndex}, v::Variable) = MOI.VariableIndex(v.index)
 
 """
-    probe(mip::MIP, var)::Tuple{Float64, Float64}
+    probe(mip::MIP, var, frac, lb, ub)::Tuple{Float64, Float64}
 
 Suppose that the LP relaxation of `mip` has been solved and that `var` holds
 a fractional value `f`. This function returns two numbers corresponding,
 respectively, to the the optimal values of the LP relaxations having the
-constraints var=1 and var=0 enforced. If any branch is infeasible, the optimal
-value for that branch is Inf for minimization problems and -Inf for maximization
-problems.
+constraints `ceil(frac) <= var <= ub` and `lb <= var <= floor(frac)` enforced.
+If any branch is infeasible, the optimal value for that branch is Inf for
+minimization problems and -Inf for maximization problems.
 """
-function probe(mip::MIP, var)::Tuple{Float64,Float64}
-    set_bounds!(mip, [var], [1.0], [1.0])
+function probe(mip::MIP, var::Variable, frac::Float64, lb::Float64, ub::Float64)::Tuple{Float64,Float64}
+    set_bounds!(mip, [var], [ceil(frac)], [ub])
     status_up, obj_up = solve_relaxation!(mip)
-    set_bounds!(mip, [var], [0.0], [0.0])
+    set_bounds!(mip, [var], [lb], [floor(frac)])
     status_down, obj_down = solve_relaxation!(mip)
-    set_bounds!(mip, [var], [0.0], [1.0])
+    set_bounds!(mip, [var], [lb], [ub])
     return obj_up * mip.sense, obj_down * mip.sense
 end

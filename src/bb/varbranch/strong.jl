@@ -33,7 +33,7 @@ function find_branching_var(rule::StrongBranching, node::Node, pool::NodePool)::
     sorted_vars = node.fractional_variables[σ]
     _strong_branch_start(node)
     no_improv_count, call_count = 0, 0
-    max_score, max_var = pseudocost_scores[σ[1]], sorted_vars[1]
+    max_score, max_var = (-Inf, -Inf), sorted_vars[1]
     for (i, var) in enumerate(sorted_vars)
         call_count += 1
         score = _strong_branch_score(
@@ -43,6 +43,7 @@ function find_branching_var(rule::StrongBranching, node::Node, pool::NodePool)::
             x = node.fractional_values[σ[i]],
             side_effect = rule.side_effect,
         )
+        # @show name(node.mip, var), round(score[1], digits=2)
         if score > max_score
             max_score, max_var = score, var
             no_improv_count = 0
@@ -63,9 +64,21 @@ function _strong_branch_score(;
     x::Float64,
     side_effect::Bool,
 )::Tuple{Float64,Int}
+
+    # Find current variable lower and upper bounds
+    offset = findfirst(isequal(var), node.mip.int_vars)
+    var_lb = node.mip.int_vars_lb[offset]
+    var_ub = node.mip.int_vars_ub[offset]
+    for (offset, v) in enumerate(node.branch_vars)
+        if v == var
+            var_lb = max(var_lb, node.branch_lb[offset])
+            var_ub = min(var_ub, node.branch_ub[offset])
+        end
+    end
+
     obj_up, obj_down = 0, 0
     try
-        obj_up, obj_down = probe(node.mip, var)
+        obj_up, obj_down = probe(node.mip, var, x, var_lb, var_ub)
     catch
         @warn "strong branch error" var = var
     end
@@ -84,10 +97,9 @@ function _strong_branch_score(;
 end
 
 function _strong_branch_start(node::Node)
-    set_bounds!(node.mip, node.branch_variables, node.branch_values, node.branch_values)
+    set_bounds!(node.mip, node.branch_vars, node.branch_lb, node.branch_ub)
 end
 
 function _strong_branch_end(node::Node)
-    nbranch = length(node.branch_variables)
-    set_bounds!(node.mip, node.branch_variables, zeros(nbranch), ones(nbranch))
+    set_bounds!(node.mip, node.mip.int_vars, node.mip.int_vars_lb, node.mip.int_vars_ub)
 end
