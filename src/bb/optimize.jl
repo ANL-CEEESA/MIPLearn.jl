@@ -15,7 +15,6 @@ function solve!(
     gap_limit::Float64 = 1e-4,
     print_interval::Int = 5,
     initial_primal_bound::Float64 = Inf,
-    detailed_output::Bool = false,
     branch_rule::VariableBranchingRule = ReliabilityBranching(),
     enable_plunging = true,
 )::NodePool
@@ -30,7 +29,7 @@ function solve!(
         pool.primal_bound = root_node.obj
         return pool
     else
-        print_progress_header(detailed_output=detailed_output)
+        print_progress_header()
     end
 
     offer(
@@ -38,7 +37,6 @@ function solve!(
         parent_node=nothing,
         child_nodes=[root_node],
         print_interval=print_interval,
-        detailed_output=detailed_output,
     )
     @threads for t = 1:nthreads()
         child_one, child_zero, suggestions = nothing, nothing, Node[]
@@ -100,7 +98,6 @@ function solve!(
                     child_nodes=[child_one, child_zero],
                     time_elapsed=time_elapsed,
                     print_interval=print_interval,
-                    detailed_output=detailed_output,
                 )
             end
         end
@@ -163,7 +160,6 @@ function solve!(
     node_limit::Int=typemax(Int),
     gap_limit::Float64=1e-4,
     print_interval::Int=5,
-    detailed_output::Bool=false,
     branch_rule::VariableBranchingRule=ReliabilityBranching()
 )::NodePool
     model = read_from_file("$filename.mps.gz")
@@ -181,7 +177,6 @@ function solve!(
         node_limit,
         gap_limit,
         print_interval,
-        detailed_output,
         branch_rule
     )
 

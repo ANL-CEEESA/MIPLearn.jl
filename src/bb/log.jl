@@ -4,7 +4,7 @@
 
 using Printf
 
-function print_progress_header(; detailed_output::Bool)
+function print_progress_header()
     @printf(
         "%8s %9s %9s %13s %13s %9s %6s %13s %6s %-24s %9s %9s %6s %6s",
         "time",
@@ -31,7 +31,6 @@ function print_progress(
     node::Node;
     time_elapsed::Float64,
     print_interval::Int,
-    detailed_output::Bool,
     primal_update::Bool,
 )::Nothing
     if (pool.processed % print_interval == 0) || isempty(pool.pending) || primal_update

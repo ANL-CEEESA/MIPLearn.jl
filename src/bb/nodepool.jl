@@ -55,7 +55,6 @@ function offer(
     child_nodes::Vector{Node},
     time_elapsed::Float64 = 0.0,
     print_interval::Int = 100,
-    detailed_output::Bool = false,
 )::Nothing
     lock(pool.lock) do
         primal_update = false
@@ -125,7 +124,6 @@ function offer(
                 node,
                 time_elapsed = time_elapsed,
                 print_interval = print_interval,
-                detailed_output = detailed_output,
                 primal_update = isfinite(node.obj) && isempty(node.fractional_variables),
             )
         end
