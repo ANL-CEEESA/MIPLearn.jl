@@ -51,12 +51,12 @@ end
 
     @testset "FileInstance" begin
         data = nothing
-        filename = tempname()
-        MIPLearn.save_data(filename, data)
-        instance = FileInstance(filename, build_model)
+        basename = tempname()
+        MIPLearn.save_data("$basename.jld2", data)
+        instance = FileInstance("$basename.jld2", build_model)
         solver = LearningSolver(Cbc.Optimizer)
         solve!(solver, instance)
-        h5 = MIPLearn.Hdf5Sample("$filename.h5")
+        h5 = MIPLearn.Hdf5Sample("$basename.h5")
         @test h5.get_array("mip_var_values") == [1.0, 0.0]
     end
 end

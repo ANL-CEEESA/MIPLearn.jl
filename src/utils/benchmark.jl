@@ -4,57 +4,60 @@
 
 using CSV
 using DataFrames
+using OrderedCollections
 
+function run_benchmarks(;
+    optimizer,
+    train_instances::Vector{<:AbstractString},
+    test_instances::Vector{<:AbstractString},
+    build_model::Function,
+    progress::Bool = false,
+    output_filename::String,
+)
+    solvers = OrderedDict(
+        "baseline" => LearningSolver(optimizer),
+        "ml-exact" => LearningSolver(optimizer),
+        "ml-heuristic" => LearningSolver(optimizer, mode="heuristic"),
+    )
 
-mutable struct BenchmarkRunner
-    solvers::Dict
-    results::Union{Nothing,DataFrame}
-    py::PyCall.PyObject
+    #solve!(solvers["baseline"], train_instances, build_model; progress)
+    fit!(solvers["ml-exact"], train_instances, build_model)
+    fit!(solvers["ml-heuristic"], train_instances, build_model)
 
-    function BenchmarkRunner(; solvers::Dict)
-        return new(
-            solvers,
-            nothing,  # results
-            miplearn.BenchmarkRunner(
-                Dict(sname => solver.py for (sname, solver) in solvers),
-            ),
-        )
+    stats = OrderedDict()
+    for (solver_name, solver) in solvers
+        stats[solver_name] = solve!(solver, test_instances, build_model; progress)
     end
-end
 
-function solve!(
-    runner::BenchmarkRunner,
-    instances::Vector{FileInstance};
-    n_trials::Int = 1,
-)::Nothing
-    instances = repeat(instances, n_trials)
-    for (solver_name, solver) in runner.solvers
-        @info "benchmark $solver_name"
-        stats = [
-            solve!(solver, instance, discard_output = true, tee = true) for
-            instance in instances
-        ]
-        for (i, s) in enumerate(stats)
+    results = nothing
+    for (solver_name, solver_stats) in stats
+        for (i, s) in enumerate(solver_stats)
             s["Solver"] = solver_name
-            s["Instance"] = instances[i].filename
+            s["Instance"] = test_instances[i]
             s = Dict(k => isnothing(v) ? missing : v for (k, v) in s)
-            if runner.results === nothing
-                runner.results = DataFrame(s)
+            if results === nothing
+                results = DataFrame(s)
             else
-                push!(runner.results, s, cols = :union)
+                push!(results, s, cols = :union)
             end
         end
-        @info "benchmark $solver_name [done]"
     end
-end
-
-function fit!(runner::BenchmarkRunner, instances::Vector{FileInstance})::Nothing
-    @python_call runner.py.fit([instance.py for instance in instances])
-end
-
-function write_csv!(runner::BenchmarkRunner, filename::AbstractString)::Nothing
-    CSV.write(filename, runner.results)
+    CSV.write(output_filename, results)
+    
+    # fig_filename = "$(tempname()).svg"
+    # df = pyimport("pandas").read_csv(csv_filename)
+    # miplearn.benchmark.plot(df, output=fig_filename)
+    # open(fig_filename) do f
+    #     display("image/svg+xml", read(f, String))
+    # end
     return
+end
+
+function run_benchmarks(; solvers, instance_filenames, build_model, output_filename)
+    runner = BenchmarkRunner(; solvers)
+    instances = [FileInstance(f, build_model) for f in instance_filenames]
+    solve!(runner, instances)
+    write_csv!(runner, output_filename)
 end
 
 export BenchmarkRunner, solve!, fit!, write_csv!

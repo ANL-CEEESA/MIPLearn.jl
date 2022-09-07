@@ -3,6 +3,8 @@
 #  Released under the modified BSD license. See COPYING.md for more details.
 
 using JLD2
+using Distributed
+using ProgressBars
 import Base: flush
 
 mutable struct FileInstance <: Instance
@@ -20,8 +22,9 @@ mutable struct FileInstance <: Instance
     )::FileInstance
         instance = new(nothing, nothing, filename, nothing, build_model, mode)
         instance.py = PyFileInstance(instance)
-        if mode != "r" || isfile("$filename.h5")
-            instance.sample = Hdf5Sample("$filename.h5", mode = mode)
+        h5_filename = replace(filename, ".jld2" => ".h5")
+        if mode != "r" || isfile(h5_filename)
+            instance.sample = Hdf5Sample(h5_filename, mode = mode)
         end
         instance.filename = filename
         return instance
@@ -107,23 +110,15 @@ function load(filename::AbstractString, build_model::Function)
     end
 end
 
-function save(data::AbstractVector, dirname::String)::Nothing
+function save(data::AbstractVector, dirname::String)::Vector{String}
     mkpath(dirname)
+    filenames = []
     for (i, d) in enumerate(data)
         filename = joinpath(dirname, @sprintf("%06d.jld2", i))
+        push!(filenames, filename)
         jldsave(filename, data = d)
     end
-end
-
-function solve!(
-    solver::LearningSolver,
-    filenames::Vector,
-    build_model::Function;
-    tee::Bool = false,
-)
-    for filename in filenames
-        solve!(solver, filename, build_model; tee)
-    end
+    return filenames
 end
 
 function fit!(
@@ -138,11 +133,41 @@ end
 
 function solve!(
     solver::LearningSolver,
+    filenames::Vector,
+    build_model::Function;
+    tee::Bool = false,
+    progress::Bool = false,
+)
+    if progress
+        filenames = ProgressBar(filenames)
+    end
+    return [solve!(solver, f, build_model; tee) for f in filenames]
+end
+
+function solve!(
+    solver::LearningSolver,
     filename::AbstractString,
     build_model::Function;
     tee::Bool = false,
 )
-    solve!(solver, FileInstance(filename, build_model); tee)
+    instance = FileInstance(filename, build_model)
+    stats = solve!(solver, instance; tee)
+    instance.sample.file.close()
+    return stats
+end
+
+function parallel_solve!(
+    solver::LearningSolver,
+    filenames::Vector,
+    build_model::Function;
+    tee::Bool = false,
+)
+    solver_filename = tempname()
+    save(solver_filename, solver)
+    @sync @distributed for filename in filenames
+        local_solver = load_solver(solver_filename)
+        solve!(local_solver, filename, build_model; tee)
+    end
 end
 
 function __init_PyFileInstance__()
