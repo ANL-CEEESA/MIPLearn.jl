@@ -15,6 +15,7 @@ Base.@kwdef mutable struct ReliabilityBranching <: VariableBranchingRule
     look_ahead::Int = 10
     n_sb_calls::Int = 0
     side_effect::Bool = true
+    max_iterations::Int = 1_000_000
 end
 
 function find_branching_var(
@@ -58,6 +59,7 @@ function find_branching_var(
                 var = var,
                 x = node.fractional_values[σ[i]],
                 side_effect = rule.side_effect,
+                max_iterations = rule.max_iterations
             )
         else
             score = pseudocost_scores[σ[i]]

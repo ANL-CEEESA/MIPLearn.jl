@@ -4,6 +4,8 @@
 
 module BB
 
+using Requires
+
 frac(x) = x - floor(x)
 
 include("structs.jl")
@@ -18,5 +20,9 @@ include("varbranch/pseudocost.jl")
 include("varbranch/random.jl")
 include("varbranch/reliability.jl")
 include("varbranch/strong.jl")
+
+function __init__()
+    @require CPLEX = "a076750e-1247-5638-91d2-ce28b192dca0" include("cplex.jl")
+end
 
 end # module

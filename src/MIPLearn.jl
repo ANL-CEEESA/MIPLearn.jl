@@ -5,6 +5,7 @@
 module MIPLearn
 
 using PyCall
+using Requires
 
 global DynamicLazyConstraintsComponent = PyNULL()
 global JuMPSolver = PyNULL()

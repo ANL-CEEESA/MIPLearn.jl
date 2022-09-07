@@ -7,6 +7,7 @@ using MIPLearn
 
 MIPLearn.setup_logger()
 const is_gurobi_available = ("GUROBI_HOME" in keys(ENV))
+const is_cplex_available = ("CPLEX_STUDIO_BINARIES" in keys(ENV))
 
 @testset "MIPLearn" begin
     include("fixtures/knapsack.jl")

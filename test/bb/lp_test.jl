@@ -37,7 +37,7 @@ function runtests(optimizer_name, optimizer; large = true)
             @test round(vals[3], digits = 6) == 0.248696
 
             # Probe (up and down are feasible)
-            probe_up, probe_down = BB.probe(mip, mip.int_vars[1], 0.5, 0.0, 1.0)
+            probe_up, probe_down = BB.probe(mip, mip.int_vars[1], 0.5, 0.0, 1.0, 1_000_000)
             @test round(probe_down, digits = 6) == 62.690000
             @test round(probe_up, digits = 6) == 62.714100
 
@@ -52,14 +52,6 @@ function runtests(optimizer_name, optimizer; large = true)
             status, obj = BB.solve_relaxation!(mip)
             @test status == :Optimal
             @test round(obj, digits = 6) == 62.714777
-
-            # Probe (up is infeasible, down is feasible)
-            BB.set_bounds!(mip, mip.int_vars[1:3], [1.0, 1.0, 0.0], [1.0, 1.0, 1.0])
-            status, obj = BB.solve_relaxation!(mip)
-            @test status == :Optimal
-            probe_up, probe_down = BB.probe(mip, mip.int_vars[3], 0.5, 0.0, 1.0)
-            @test round(probe_up, digits = 6) == Inf
-            @test round(probe_down, digits = 6) == 63.073992
 
             # Fix all binary variables to one, making problem infeasible
             N = length(mip.int_vars)
@@ -105,9 +97,32 @@ function runtests(optimizer_name, optimizer; large = true)
 end
 
 @testset "BB" begin
-    @time runtests("Clp", Clp.Optimizer)
+    # @time runtests(
+    #     "Clp",
+    #     optimizer_with_attributes(
+    #         Clp.Optimizer,
+    #     ),
+    # )
+
     if is_gurobi_available
         using Gurobi
-        @time runtests("Gurobi", Gurobi.Optimizer)
+        @time runtests(
+            "Gurobi",
+            optimizer_with_attributes(
+                Gurobi.Optimizer,
+                "Threads" => 1,
+            )
+        )
+    end
+
+    if is_cplex_available
+        using CPLEX
+        @time runtests(
+            "CPLEX",
+            optimizer_with_attributes(
+                CPLEX.Optimizer,
+                "CPXPARAM_Threads" => 1,
+            ),
+        )
     end
 end

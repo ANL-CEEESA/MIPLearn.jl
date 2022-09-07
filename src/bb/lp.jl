@@ -28,7 +28,7 @@ end
 
 function load!(mip::MIP, prototype::JuMP.Model)
     @threads for t = 1:nthreads()
-        model = Model()
+        model = direct_model(mip.constructor)
         MOI.copy_to(model, backend(prototype))
         _replace_zero_one!(backend(model))
         if t == 1
@@ -38,7 +38,6 @@ function load!(mip::MIP, prototype::JuMP.Model)
             mip.sense = _get_objective_sense(backend(model))
         end
         _relax_integrality!(backend(model))
-        set_optimizer(model, mip.constructor)
         mip.optimizers[t] = backend(model)
         set_silent(model)
     end
@@ -236,23 +235,40 @@ function name(mip::MIP, var::Variable)::String
     return MOI.get(mip.optimizers[t], MOI.VariableName(), MOI.VariableIndex(var.index))
 end
 
-# convert(::Type{MOI.VariableIndex}, v::Variable) = MOI.VariableIndex(v.index)
-
 """
-    probe(mip::MIP, var, frac, lb, ub)::Tuple{Float64, Float64}
+    probe(mip::MIP, var, x, lb, ub, max_iterations)::Tuple{Float64, Float64}
 
 Suppose that the LP relaxation of `mip` has been solved and that `var` holds
-a fractional value `f`. This function returns two numbers corresponding,
+a fractional value `x`. This function returns two numbers corresponding,
 respectively, to the the optimal values of the LP relaxations having the
-constraints `ceil(frac) <= var <= ub` and `lb <= var <= floor(frac)` enforced.
+constraints `ceil(x) <= var <= ub` and `lb <= var <= floor(x)` enforced.
 If any branch is infeasible, the optimal value for that branch is Inf for
 minimization problems and -Inf for maximization problems.
 """
-function probe(mip::MIP, var::Variable, frac::Float64, lb::Float64, ub::Float64)::Tuple{Float64,Float64}
-    set_bounds!(mip, [var], [ceil(frac)], [ub])
-    status_up, obj_up = solve_relaxation!(mip)
-    set_bounds!(mip, [var], [lb], [floor(frac)])
-    status_down, obj_down = solve_relaxation!(mip)
+function probe(
+    mip::MIP,
+    var::Variable,
+    x::Float64,
+    lb::Float64,
+    ub::Float64,
+    max_iterations::Int,
+)::Tuple{Float64,Float64}
+    return _probe(mip, mip.optimizers[threadid()], var, x, lb, ub, max_iterations)
+end
+
+function _probe(
+    mip::MIP,
+    _,
+    var::Variable,
+    x::Float64,
+    lb::Float64,
+    ub::Float64,
+    ::Int,
+)::Tuple{Float64,Float64}
+    set_bounds!(mip, [var], [ceil(x)], [ceil(x)])
+    _, obj_up = solve_relaxation!(mip)
+    set_bounds!(mip, [var], [floor(x)], [floor(x)])
+    _, obj_down = solve_relaxation!(mip)
     set_bounds!(mip, [var], [lb], [ub])
     return obj_up * mip.sense, obj_down * mip.sense
 end

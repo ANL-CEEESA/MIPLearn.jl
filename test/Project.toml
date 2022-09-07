@@ -2,6 +2,7 @@
 Cbc = "9961bab8-2fa3-5c5a-9d89-47fab24efd76"
 Clp = "e2554f3b-3117-50c0-817c-e040a3ddf72d"
 Conda = "8f4d0f93-b110-5947-807f-2305c1781a2d"
+CPLEX = "a076750e-1247-5638-91d2-ce28b192dca0"
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 Gurobi = "2e9cd046-0924-5485-92f1-d5272153d98b"

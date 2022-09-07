@@ -17,6 +17,7 @@ Base.@kwdef struct StrongBranching <: VariableBranchingRule
     look_ahead::Int = 10
     max_calls::Int = 100
     side_effect::Bool = true
+    max_iterations::Int = 1_000_000
 end
 
 function find_branching_var(rule::StrongBranching, node::Node, pool::NodePool)::Variable
@@ -42,6 +43,7 @@ function find_branching_var(rule::StrongBranching, node::Node, pool::NodePool)::
             var = var,
             x = node.fractional_values[σ[i]],
             side_effect = rule.side_effect,
+            max_iterations = rule.max_iterations,
         )
         # @show name(node.mip, var), round(score[1], digits=2)
         if score > max_score
@@ -63,6 +65,7 @@ function _strong_branch_score(;
     var::Variable,
     x::Float64,
     side_effect::Bool,
+    max_iterations::Int,
 )::Tuple{Float64,Int}
 
     # Find current variable lower and upper bounds
@@ -77,11 +80,7 @@ function _strong_branch_score(;
     end
 
     obj_up, obj_down = 0, 0
-    try
-        obj_up, obj_down = probe(node.mip, var, x, var_lb, var_ub)
-    catch
-        @warn "strong branch error" var = var
-    end
+    obj_up, obj_down = probe(node.mip, var, x, var_lb, var_ub, max_iterations)
     obj_change_up = obj_up - node.obj
     obj_change_down = obj_down - node.obj
     if side_effect
