@@ -35,6 +35,7 @@ include("utils/benchmark.jl")
 include("utils/parse.jl")
 
 include("bb/BB.jl")
+include("cuts/Cuts.jl")
 
 function __init__()
     copy!(miplearn, pyimport("miplearn"))
