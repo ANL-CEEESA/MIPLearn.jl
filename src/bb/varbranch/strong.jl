@@ -96,6 +96,7 @@ function _strong_branch_score(;
 end
 
 function _strong_branch_start(node::Node)
+    _strong_branch_end(node)
     set_bounds!(node.mip, node.branch_vars, node.branch_lb, node.branch_ub)
 end
 
