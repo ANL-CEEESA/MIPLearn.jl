@@ -79,6 +79,8 @@ function runtests(optimizer_name, optimizer; large = true)
                 BB.StrongBranching(),
                 BB.ReliabilityBranching(),
                 BB.HybridBranching(),
+                BB.StrongBranching(aggregation=:min),
+                BB.ReliabilityBranching(aggregation=:min),
             ]
             for branch_rule in branch_rules
                 for instance in ["bell5", "vpm2"]
