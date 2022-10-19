@@ -32,7 +32,7 @@ function find_branching_var(rule::StrongBranching, node::Node, pool::NodePool)::
     ]
     σ = sortperm(pseudocost_scores, rev = true)
     sorted_vars = node.fractional_variables[σ]
-    _strong_branch_start(node)
+    _set_node_bounds(node)
     no_improv_count, call_count = 0, 0
     max_score, max_var = (-Inf, -Inf), sorted_vars[1]
     for (i, var) in enumerate(sorted_vars)
@@ -55,7 +55,7 @@ function find_branching_var(rule::StrongBranching, node::Node, pool::NodePool)::
         no_improv_count <= rule.look_ahead || break
         call_count <= rule.max_calls || break
     end
-    _strong_branch_end(node)
+    _unset_node_bounds(node)
     return max_var
 end
 
@@ -93,12 +93,4 @@ function _strong_branch_score(;
         )
     end
     return (obj_change_up * obj_change_down, var.index)
-end
-
-function _strong_branch_start(node::Node)
-    set_bounds!(node.mip, node.branch_vars, node.branch_lb, node.branch_ub)
-end
-
-function _strong_branch_end(node::Node)
-    set_bounds!(node.mip, node.mip.int_vars, node.mip.int_vars_lb, node.mip.int_vars_ub)
 end

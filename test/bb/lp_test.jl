@@ -6,6 +6,7 @@ using Clp
 using JuMP
 using Test
 using MIPLearn.BB
+using MIPLearn
 
 basepath = @__DIR__
 
@@ -80,17 +81,25 @@ function runtests(optimizer_name, optimizer; large = true)
                 BB.HybridBranching(),
             ]
             for branch_rule in branch_rules
-                filename = "$basepath/../fixtures/vpm2.mps.gz"
-                mip = BB.init(optimizer)
-                BB.read!(mip, filename)
-                @info optimizer_name, branch_rule
-                @time BB.solve!(
-                    mip,
-                    initial_primal_bound = 13.75,
-                    print_interval = 10,
-                    node_limit = 100,
-                    branch_rule = branch_rule,
-                )
+                for instance in ["bell5", "vpm2"]
+                    h5 = Hdf5Sample("$basepath/../fixtures/$instance.h5")
+                    mip_lower_bound = h5.get_scalar("mip_lower_bound")
+                    mip_upper_bound = h5.get_scalar("mip_upper_bound")
+                    mip_sense = h5.get_scalar("mip_sense")
+                    mip_primal_bound = mip_sense == "min" ? mip_upper_bound : mip_lower_bound
+                    h5.file.close()
+
+                    mip = BB.init(optimizer)
+                    BB.read!(mip, "$basepath/../fixtures/$instance.mps.gz")
+                    @info optimizer_name, branch_rule, instance
+                    @time BB.solve!(
+                        mip,
+                        initial_primal_bound = mip_primal_bound,
+                        print_interval = 10,
+                        node_limit = 100,
+                        branch_rule = branch_rule,
+                    )
+                end
             end
         end
     end

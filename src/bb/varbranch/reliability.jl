@@ -34,7 +34,7 @@ function find_branching_var(
     ]
     σ = sortperm(pseudocost_scores, rev = true)
     sorted_vars = node.fractional_variables[σ]
-    _strong_branch_start(node)
+    _set_node_bounds(node)
     no_improv_count, n_sb_calls = 0, 0
     max_score, max_var = pseudocost_scores[σ[1]], sorted_vars[1]
     for (i, var) in enumerate(sorted_vars)
@@ -72,6 +72,6 @@ function find_branching_var(
         end
         no_improv_count <= rule.look_ahead || break
     end
-    _strong_branch_end(node)
+    _unset_node_bounds(node)
     return max_var
 end

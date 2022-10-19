@@ -58,6 +58,13 @@ function solve!(
                 sleep(0.1)
                 continue
             else
+                # Assert node is feasible
+                _set_node_bounds(node)
+                status, _ = solve_relaxation!(mip)
+                @assert status == :Optimal
+                _unset_node_bounds(node)
+
+                # Find branching variable
                 ids = generate_indices(pool, 2)
                 branch_var = find_branching_var(branch_rule, node, pool)
 
@@ -136,8 +143,7 @@ function _create_node(
         fractional_variables = Variable[]
         fractional_values = Float64[]
     end
-    n_branch = length(branch_vars)
-    set_bounds!(mip, branch_vars, zeros(n_branch), ones(n_branch))
+    set_bounds!(mip, mip.int_vars, mip.int_vars_lb, mip.int_vars_ub)
     return Node(
         mip,
         index,
@@ -196,4 +202,12 @@ function solve!(
     h5.put_array("bb_var_priority", priorities)
 
     return pool
+end
+
+function _set_node_bounds(node::Node)
+    set_bounds!(node.mip, node.branch_vars, node.branch_lb, node.branch_ub)
+end
+
+function _unset_node_bounds(node::Node)
+    set_bounds!(node.mip, node.mip.int_vars, node.mip.int_vars_lb, node.mip.int_vars_ub)
 end
