@@ -16,6 +16,7 @@ function collect!(
     gap_limit::Float64 = 1e-4,
     print_interval::Int = 5,
     branch_rule::VariableBranchingRule = ReliabilityBranching(collect = true),
+    enable_plunging = true,
 )::NodePool
     model = read_from_file(filename)
     mip = init(optimizer)
@@ -36,6 +37,7 @@ function collect!(
         gap_limit,
         print_interval,
         branch_rule,
+        enable_plunging,
     )
 
     h5 = Hdf5Sample(replace(filename, ".mps.gz" => ".h5"))

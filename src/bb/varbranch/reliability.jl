@@ -182,6 +182,9 @@ function find_branching_var(
 end
 
 function collect!(rule::ReliabilityBranching, h5)
+    if rule.stats.num_strong_branch_calls == 0
+        return
+    end
     h5.put_array("bb_score_var_names", to_str_array(rule.stats.score_var_names))
     h5.put_array("bb_score_features", vcat(rule.stats.score_features'...))
     h5.put_array("bb_score_targets", rule.stats.score_targets)
