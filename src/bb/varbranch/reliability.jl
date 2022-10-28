@@ -19,6 +19,50 @@ Base.@kwdef mutable struct ReliabilityBranching <: VariableBranchingRule
     aggregation::Symbol = :prod
 end
 
+function _strong_branch_score(;
+    node::Node,
+    pool::NodePool,
+    var::Variable,
+    x::Float64,
+    side_effect::Bool,
+    max_iterations::Int,
+    aggregation::Symbol,
+)::Tuple{Float64,Int}
+
+    # Find current variable lower and upper bounds
+    offset = findfirst(isequal(var), node.mip.int_vars)
+    var_lb = node.mip.int_vars_lb[offset]
+    var_ub = node.mip.int_vars_ub[offset]
+    for (offset, v) in enumerate(node.branch_vars)
+        if v == var
+            var_lb = max(var_lb, node.branch_lb[offset])
+            var_ub = min(var_ub, node.branch_ub[offset])
+        end
+    end
+
+    obj_up, obj_down = 0, 0
+    obj_up, obj_down = probe(node.mip, var, x, var_lb, var_ub, max_iterations)
+    obj_change_up = obj_up - node.obj
+    obj_change_down = obj_down - node.obj
+    if side_effect
+        _update_var_history(
+            pool = pool,
+            var = var,
+            x = x,
+            obj_change_down = obj_change_down,
+            obj_change_up = obj_change_up,
+        )
+    end
+    if aggregation == :prod
+        return (obj_change_up * obj_change_down, var.index)
+    elseif aggregation == :min
+        sense = node.mip.sense
+        return (min(sense * obj_up, sense * obj_down), var.index)
+    else
+        error("Unknown aggregation: $aggregation")
+    end
+end
+
 function find_branching_var(
     rule::ReliabilityBranching,
     node::Node,
