@@ -28,7 +28,7 @@ function runtests(optimizer_name, optimizer; large = true)
             @test BB.name(mip, mip.int_vars[1]) == "xab"
             @test BB.name(mip, mip.int_vars[2]) == "xac"
             @test BB.name(mip, mip.int_vars[3]) == "xad"
-            
+
             @test mip.int_vars_lb[1] == 0.0
             @test mip.int_vars_ub[1] == 1.0
 
@@ -70,25 +70,25 @@ function runtests(optimizer_name, optimizer; large = true)
         end
 
         @testset "varbranch" begin
-            branch_rules = [
-                BB.RandomBranching(),
-                BB.FirstInfeasibleBranching(),
-                BB.LeastInfeasibleBranching(),
-                BB.MostInfeasibleBranching(),
-                BB.PseudocostBranching(),
-                BB.StrongBranching(),
-                BB.ReliabilityBranching(),
-                BB.HybridBranching(),
-                BB.StrongBranching(aggregation=:min),
-                BB.ReliabilityBranching(aggregation=:min),
-            ]
-            for branch_rule in branch_rules
-                for instance in ["bell5", "vpm2"]
+            for instance in ["bell5", "vpm2"]
+                for branch_rule in [
+                    BB.RandomBranching(),
+                    BB.FirstInfeasibleBranching(),
+                    BB.LeastInfeasibleBranching(),
+                    BB.MostInfeasibleBranching(),
+                    BB.PseudocostBranching(),
+                    BB.StrongBranching(),
+                    BB.ReliabilityBranching(),
+                    BB.HybridBranching(),
+                    BB.StrongBranching(aggregation = :min),
+                    BB.ReliabilityBranching(aggregation = :min, collect = true),
+                ]
                     h5 = Hdf5Sample("$basepath/../fixtures/$instance.h5")
                     mip_lower_bound = h5.get_scalar("mip_lower_bound")
                     mip_upper_bound = h5.get_scalar("mip_upper_bound")
                     mip_sense = h5.get_scalar("mip_sense")
-                    mip_primal_bound = mip_sense == "min" ? mip_upper_bound : mip_lower_bound
+                    mip_primal_bound =
+                        mip_sense == "min" ? mip_upper_bound : mip_lower_bound
                     h5.file.close()
 
                     mip = BB.init(optimizer)
@@ -104,25 +104,35 @@ function runtests(optimizer_name, optimizer; large = true)
                 end
             end
         end
+
+        @testset "collect" begin
+            rule = BB.ReliabilityBranching(collect = true)
+            BB.collect!(
+                optimizer,
+                "$basepath/../fixtures/bell5.mps.gz",
+                node_limit = 100,
+                print_interval = 10,
+                branch_rule = rule,
+            )
+            n_sb = rule.stats.num_strong_branch_calls
+            h5 = Hdf5Sample("$basepath/../fixtures/bell5.h5")
+            @test size(h5.get_array("bb_var_pseudocost_up")) == (104,)
+            @test size(h5.get_array("bb_score_var_names")) == (n_sb,)
+            @test size(h5.get_array("bb_score_features")) == (n_sb, 6)
+            @test size(h5.get_array("bb_score_targets")) == (n_sb,)
+            h5.file.close()
+        end
     end
 end
 
 @testset "BB" begin
-    @time runtests(
-        "Clp",
-        optimizer_with_attributes(
-            Clp.Optimizer,
-        ),
-    )
+    @time runtests("Clp", optimizer_with_attributes(Clp.Optimizer))
 
     if is_gurobi_available
         using Gurobi
         @time runtests(
             "Gurobi",
-            optimizer_with_attributes(
-                Gurobi.Optimizer,
-                "Threads" => 1,
-            )
+            optimizer_with_attributes(Gurobi.Optimizer, "Threads" => 1),
         )
     end
 
@@ -130,10 +140,7 @@ end
         using CPLEX
         @time runtests(
             "CPLEX",
-            optimizer_with_attributes(
-                CPLEX.Optimizer,
-                "CPXPARAM_Threads" => 1,
-            ),
+            optimizer_with_attributes(CPLEX.Optimizer, "CPXPARAM_Threads" => 1),
         )
     end
 end

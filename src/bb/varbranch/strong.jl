@@ -21,12 +21,12 @@ end
 
 function find_branching_var(rule::StrongBranching, node::Node, pool::NodePool)::Variable
     rb_rule = ReliabilityBranching(
-        min_samples=typemax(Int),
-        max_sb_calls=rule.max_calls,
-        look_ahead=rule.look_ahead,
-        side_effect=rule.side_effect,
-        max_iterations=rule.max_iterations,
-        aggregation=rule.aggregation,
+        min_samples = typemax(Int),
+        max_sb_calls = rule.max_calls,
+        look_ahead = rule.look_ahead,
+        side_effect = rule.side_effect,
+        max_iterations = rule.max_iterations,
+        aggregation = rule.aggregation,
     )
     return find_branching_var(rb_rule, node, pool)
 end

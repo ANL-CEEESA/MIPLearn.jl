@@ -11,13 +11,14 @@ const MOI = MathOptInterface
 
 function init(constructor)::MIP
     return MIP(
-        constructor,
-        Any[nothing for t = 1:nthreads()],
-        Variable[],
-        Float64[],
-        Float64[],
-        1.0,
-        0,
+        constructor = constructor,
+        optimizers = Any[nothing for t = 1:nthreads()],
+        int_vars = Variable[],
+        int_vars_lb = Float64[],
+        int_vars_ub = Float64[],
+        sense = 1.0,
+        lp_iterations = 0,
+        nvars = 0,
     )
 end
 
@@ -27,10 +28,10 @@ function read!(mip::MIP, filename::AbstractString)::Nothing
 end
 
 function load!(mip::MIP, prototype::JuMP.Model)
+    mip.nvars = num_variables(prototype)
     _replace_zero_one!(backend(prototype))
     _assert_supported(backend(prototype))
-    mip.int_vars, mip.int_vars_lb, mip.int_vars_ub =
-        _get_int_variables(backend(prototype))
+    mip.int_vars, mip.int_vars_lb, mip.int_vars_ub = _get_int_variables(backend(prototype))
     mip.sense = _get_objective_sense(backend(prototype))
     _relax_integrality!(backend(prototype))
     @threads for t = 1:nthreads()
@@ -133,11 +134,7 @@ function _get_int_variables(
                 var_ub = constr.upper
                 MOI.delete(optimizer, _upper_bound_index(var))
             end
-            MOI.add_constraint(
-                optimizer,
-                var,
-                MOI.Interval(var_lb, var_ub),
-            )
+            MOI.add_constraint(optimizer, var, MOI.Interval(var_lb, var_ub))
         end
         push!(vars, var)
         push!(lb, var_lb)

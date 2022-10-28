@@ -33,9 +33,9 @@ using Cbc
     @testset "Save and load data" begin
         filename = tempname()
         data = KnapsackData(
-            weights=[5.0, 5.0, 5.0],
-            prices=[1.0, 1.0, 1.0],
-            capacity=3.0,
+            weights = [5.0, 5.0, 5.0],
+            prices = [1.0, 1.0, 1.0],
+            capacity = 3.0,
         )
         MIPLearn.save_data(filename, data)
         loaded = MIPLearn.load_data(filename)

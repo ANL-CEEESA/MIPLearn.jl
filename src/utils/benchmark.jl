@@ -17,7 +17,7 @@ function run_benchmarks(;
     solvers = OrderedDict(
         "baseline" => LearningSolver(optimizer),
         "ml-exact" => LearningSolver(optimizer),
-        "ml-heuristic" => LearningSolver(optimizer, mode="heuristic"),
+        "ml-heuristic" => LearningSolver(optimizer, mode = "heuristic"),
     )
 
     #solve!(solvers["baseline"], train_instances, build_model; progress)
@@ -43,7 +43,7 @@ function run_benchmarks(;
         end
     end
     CSV.write(output_filename, results)
-    
+
     # fig_filename = "$(tempname()).svg"
     # df = pyimport("pandas").read_csv(csv_filename)
     # miplearn.benchmark.plot(df, output=fig_filename)

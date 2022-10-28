@@ -19,15 +19,7 @@ function _probe(
     status = CPXlpopt(cpx.env, cpx.lp)
     status == 0 || error("CPXlpopt failed ($status)")
 
-    status = CPXstrongbranch(
-        cpx.env,
-        cpx.lp,
-        indices,
-        cnt,
-        downobj,
-        upobj,
-        itlim,
-    )
+    status = CPXstrongbranch(cpx.env, cpx.lp, indices, cnt, downobj, upobj, itlim)
     status == 0 || error("CPXstrongbranch failed ($status)")
 
     return upobj[1] * mip.sense, downobj[1] * mip.sense

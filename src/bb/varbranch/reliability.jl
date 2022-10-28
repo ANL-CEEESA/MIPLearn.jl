@@ -2,6 +2,16 @@
 #  Copyright (C) 2020, UChicago Argonne, LLC. All rights reserved.
 #  Released under the modified BSD license. See COPYING.md for more details.
 
+import ..to_str_array
+
+Base.@kwdef mutable struct ReliabilityBranchingStats
+    branched_count::Vector{Int} = []
+    num_strong_branch_calls = 0
+    score_var_names::Vector{String} = []
+    score_features::Vector{Vector{Float32}} = []
+    score_targets::Vector{Float32} = []
+end
+
 """
     ReliabilityBranching
 
@@ -13,11 +23,13 @@ Base.@kwdef mutable struct ReliabilityBranching <: VariableBranchingRule
     min_samples::Int = 8
     max_sb_calls::Int = 100
     look_ahead::Int = 10
-    n_sb_calls::Int = 0
     side_effect::Bool = true
     max_iterations::Int = 1_000_000
     aggregation::Symbol = :prod
+    stats::ReliabilityBranchingStats = ReliabilityBranchingStats()
+    collect::Bool = false
 end
+
 
 function _strong_branch_score(;
     node::Node,
@@ -28,7 +40,6 @@ function _strong_branch_score(;
     max_iterations::Int,
     aggregation::Symbol,
 )::Tuple{Float64,Int}
-
     # Find current variable lower and upper bounds
     offset = findfirst(isequal(var), node.mip.int_vars)
     var_lb = node.mip.int_vars_lb[offset]
@@ -68,6 +79,14 @@ function find_branching_var(
     node::Node,
     pool::NodePool,
 )::Variable
+    stats = rule.stats
+
+    # Initialize statistics
+    if isempty(stats.branched_count)
+        stats.branched_count = zeros(node.mip.nvars)
+    end
+
+    # Sort variables by pseudocost score
     nfrac = length(node.fractional_variables)
     pseudocost_scores = [
         _pseudocost_score(
@@ -79,10 +98,37 @@ function find_branching_var(
     ]
     σ = sortperm(pseudocost_scores, rev = true)
     sorted_vars = node.fractional_variables[σ]
+
+    if rule.collect
+        # Compute dynamic features for all fractional variables
+        features = []
+        for (i, var) in enumerate(sorted_vars)
+            branched_count = stats.branched_count[var.index]
+            branched_count_rel = 0.0
+            branched_count_sum = sum(stats.branched_count[var.index])
+            if branched_count_sum > 0
+                branched_count_rel = branched_count / branched_count_sum
+            end
+            push!(
+                features,
+                Float32[
+                    nfrac,
+                    node.fractional_values[σ[i]],
+                    node.depth,
+                    pseudocost_scores[σ[i]][1],
+                    branched_count,
+                    branched_count_rel,
+                ],
+            )
+        end
+    end
+
     _set_node_bounds(node)
     no_improv_count, n_sb_calls = 0, 0
-    max_score, max_var = pseudocost_scores[σ[1]], sorted_vars[1]
+    max_score, max_var = (-Inf, -Inf), sorted_vars[1]
     for (i, var) in enumerate(sorted_vars)
+
+        # Decide whether to use strong branching
         use_strong_branch = true
         if n_sb_calls >= rule.max_sb_calls
             use_strong_branch = false
@@ -95,9 +141,10 @@ function find_branching_var(
                 end
             end
         end
+
         if use_strong_branch
+            # Compute strong branching score
             n_sb_calls += 1
-            rule.n_sb_calls += 1
             score = _strong_branch_score(
                 node = node,
                 pool = pool,
@@ -107,6 +154,13 @@ function find_branching_var(
                 max_iterations = rule.max_iterations,
                 aggregation = rule.aggregation,
             )
+
+            if rule.collect
+                # Store training data
+                push!(stats.score_var_names, name(node.mip, var))
+                push!(stats.score_features, features[i])
+                push!(stats.score_targets, score[1])
+            end
         else
             score = pseudocost_scores[σ[i]]
         end
@@ -119,5 +173,16 @@ function find_branching_var(
         no_improv_count <= rule.look_ahead || break
     end
     _unset_node_bounds(node)
+
+    # Update statistics
+    stats.branched_count[max_var.index] += 1
+    stats.num_strong_branch_calls += n_sb_calls
+
     return max_var
+end
+
+function collect!(rule::ReliabilityBranching, h5)
+    h5.put_array("bb_score_var_names", to_str_array(rule.stats.score_var_names))
+    h5.put_array("bb_score_features", vcat(rule.stats.score_features'...))
+    h5.put_array("bb_score_targets", rule.stats.score_targets)
 end

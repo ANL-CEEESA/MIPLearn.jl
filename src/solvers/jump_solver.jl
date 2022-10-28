@@ -78,13 +78,9 @@ function _update_solution!(data::JuMPSolverData)
                 rc += shadow_price(FixRef(var))
             end
             push!(data.reduced_costs, rc)
-            
+
             # Basis status
-            data.basis_status[var] = MOI.get(
-                data.model,
-                MOI.VariableBasisStatus(),
-                var,
-            )
+            data.basis_status[var] = MOI.get(data.model, MOI.VariableBasisStatus(), var)
         end
 
         try

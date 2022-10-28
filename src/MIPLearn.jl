@@ -21,6 +21,9 @@ global UserCutsComponent = PyNULL()
 global MemorySample = PyNULL()
 global Hdf5Sample = PyNULL()
 
+to_str_array(values) = py"to_str_array"(values)
+from_str_array(values) = py"from_str_array"(values)
+
 include("solvers/structs.jl")
 
 include("utils/log.jl")
@@ -64,9 +67,6 @@ function __init__()
         return [v.decode() for v in values]
     """
 end
-
-to_str_array(values) = py"to_str_array"(values)
-from_str_array(values) = py"from_str_array"(values)
 
 function convert(::Type{SparseMatrixCSC}, o::PyObject)
     I, J, V = pyimport("scipy.sparse").find(o)

@@ -10,6 +10,7 @@ frac(x) = x - floor(x)
 
 include("structs.jl")
 
+include("collect.jl")
 include("nodepool.jl")
 include("optimize.jl")
 include("log.jl")

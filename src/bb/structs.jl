@@ -9,7 +9,7 @@ struct Variable
     index::Any
 end
 
-mutable struct MIP
+Base.@kwdef mutable struct MIP
     constructor::Any
     optimizers::Vector
     int_vars::Vector{Variable}
@@ -17,6 +17,7 @@ mutable struct MIP
     int_vars_ub::Vector{Float64}
     sense::Float64
     lp_iterations::Int64
+    nvars::Int
 end
 
 struct Node

@@ -19,7 +19,7 @@ function solve!(
     enable_plunging = true,
 )::NodePool
     time_initial = time()
-    pool = NodePool(mip=mip)
+    pool = NodePool(mip = mip)
     pool.primal_bound = initial_primal_bound
 
     root_node = _create_node(mip)
@@ -34,9 +34,9 @@ function solve!(
 
     offer(
         pool,
-        parent_node=nothing,
-        child_nodes=[root_node],
-        print_interval=print_interval,
+        parent_node = nothing,
+        child_nodes = [root_node],
+        print_interval = print_interval,
     )
     @threads for t = 1:nthreads()
         child_one, child_zero, suggestions = nothing, nothing, Node[]
@@ -47,10 +47,10 @@ function solve!(
             end
             node = take(
                 pool,
-                suggestions=suggestions,
-                time_remaining=time_limit - time_elapsed,
-                node_limit=node_limit,
-                gap_limit=gap_limit,
+                suggestions = suggestions,
+                time_remaining = time_limit - time_elapsed,
+                node_limit = node_limit,
+                gap_limit = gap_limit,
             )
             if node == :END
                 break
@@ -85,26 +85,26 @@ function solve!(
 
                 child_zero = _create_node(
                     mip,
-                    index=ids[2],
-                    parent=node,
-                    branch_var=branch_var,
-                    branch_var_lb=var_lb,
-                    branch_var_ub=floor(var_value),
+                    index = ids[2],
+                    parent = node,
+                    branch_var = branch_var,
+                    branch_var_lb = var_lb,
+                    branch_var_ub = floor(var_value),
                 )
                 child_one = _create_node(
                     mip,
-                    index=ids[1],
-                    parent=node,
-                    branch_var=branch_var,
-                    branch_var_lb=ceil(var_value),
-                    branch_var_ub=var_ub,
+                    index = ids[1],
+                    parent = node,
+                    branch_var = branch_var,
+                    branch_var_lb = ceil(var_value),
+                    branch_var_ub = var_ub,
                 )
                 offer(
                     pool,
-                    parent_node=node,
-                    child_nodes=[child_one, child_zero],
-                    time_elapsed=time_elapsed,
-                    print_interval=print_interval,
+                    parent_node = node,
+                    child_nodes = [child_one, child_zero],
+                    time_elapsed = time_elapsed,
+                    print_interval = print_interval,
                 )
             end
         end
@@ -114,11 +114,11 @@ end
 
 function _create_node(
     mip;
-    index::Int=0,
-    parent::Union{Nothing,Node}=nothing,
-    branch_var::Union{Nothing,Variable}=nothing,
-    branch_var_lb::Union{Nothing,Float64}=nothing,
-    branch_var_ub::Union{Nothing,Float64}=nothing
+    index::Int = 0,
+    parent::Union{Nothing,Node} = nothing,
+    branch_var::Union{Nothing,Variable} = nothing,
+    branch_var_lb::Union{Nothing,Float64} = nothing,
+    branch_var_ub::Union{Nothing,Float64} = nothing,
 )::Node
     if parent === nothing
         branch_vars = Variable[]
@@ -135,8 +135,9 @@ function _create_node(
     status, obj = solve_relaxation!(mip)
     if status == :Optimal
         vals = values(mip, mip.int_vars)
-        fractional_indices =
-            [j for j in 1:length(mip.int_vars) if 1e-6 < vals[j] - floor(vals[j]) < 1 - 1e-6]
+        fractional_indices = [
+            j for j in 1:length(mip.int_vars) if 1e-6 < vals[j] - floor(vals[j]) < 1 - 1e-6
+        ]
         fractional_values = vals[fractional_indices]
         fractional_variables = mip.int_vars[fractional_indices]
     else
@@ -157,51 +158,6 @@ function _create_node(
         fractional_values,
         parent,
     )
-end
-
-function solve!(
-    optimizer,
-    filename::String;
-    time_limit::Float64=Inf,
-    node_limit::Int=typemax(Int),
-    gap_limit::Float64=1e-4,
-    print_interval::Int=5,
-    branch_rule::VariableBranchingRule=ReliabilityBranching()
-)::NodePool
-    model = read_from_file("$filename.mps.gz")
-    mip = init(optimizer)
-    load!(mip, model)
-
-    h5 = Hdf5Sample("$filename.h5")
-    primal_bound = h5.get_scalar("mip_obj_value")
-    nvars = length(h5.get_array("static_var_names"))
-
-    pool = solve!(
-        mip;
-        initial_primal_bound=primal_bound,
-        time_limit,
-        node_limit,
-        gap_limit,
-        print_interval,
-        branch_rule
-    )
-
-    pseudocost_up = [NaN for _ = 1:nvars]
-    pseudocost_down = [NaN for _ = 1:nvars]
-    priorities = [0.0 for _ in 1:nvars]
-    for (var, var_hist) in pool.var_history
-        pseudocost_up[var.index] = var_hist.pseudocost_up
-        pseudocost_down[var.index] = var_hist.pseudocost_down
-        x = mean(var_hist.fractional_values)
-        f_up = x - floor(x)
-        f_down = ceil(x) - x
-        priorities[var.index] = var_hist.pseudocost_up * f_up * var_hist.pseudocost_down * f_down
-    end
-    h5.put_array("bb_var_pseudocost_up", pseudocost_up)
-    h5.put_array("bb_var_pseudocost_down", pseudocost_down)
-    h5.put_array("bb_var_priority", priorities)
-
-    return pool
 end
 
 function _set_node_bounds(node::Node)
