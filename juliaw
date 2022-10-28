@@ -1,5 +1,5 @@
 #!/bin/bash
-# MIPLearn: Extensible Framework for Learning-Enhanced Mixed-Integer Optimization
+# UnitCommitment.jl: Optimization Package for Security-Constrained Unit Commitment
 # Copyright (C) 2020-2021, UChicago Argonne, LLC. All rights reserved.
 # Released under the modified BSD license. See COPYING.md for more details.
 
@@ -47,7 +47,14 @@ project = TOML.parsefile("Project.toml")
 manifest = TOML.parsefile("Manifest.toml")
 deps = Symbol[]
 for dep in keys(project["deps"])
-    if "path" in keys(manifest[dep][1])
+    if dep in keys(manifest)
+	# Up to Julia 1.6
+        dep_entry = manifest[dep][1]
+    else
+        # Julia 1.7+
+        dep_entry = manifest["deps"][dep][1]
+    end
+    if "path" in keys(dep_entry)
         println("  - \$(dep) [skip]")
     else
         println("  - \$(dep)")
