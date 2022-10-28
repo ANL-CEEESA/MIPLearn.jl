@@ -108,12 +108,12 @@ function runtests(optimizer_name, optimizer; large = true)
 end
 
 @testset "BB" begin
-    # @time runtests(
-    #     "Clp",
-    #     optimizer_with_attributes(
-    #         Clp.Optimizer,
-    #     ),
-    # )
+    @time runtests(
+        "Clp",
+        optimizer_with_attributes(
+            Clp.Optimizer,
+        ),
+    )
 
     if is_gurobi_available
         using Gurobi

@@ -26,6 +26,7 @@ end
         _test_solver(Cbc.Optimizer)
     end
     if is_gurobi_available
+        using Gurobi
         @testset "Gurobi" begin
             _test_solver(Gurobi.Optimizer)
         end

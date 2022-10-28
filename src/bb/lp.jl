@@ -27,17 +27,15 @@ function read!(mip::MIP, filename::AbstractString)::Nothing
 end
 
 function load!(mip::MIP, prototype::JuMP.Model)
+    _replace_zero_one!(backend(prototype))
+    _assert_supported(backend(prototype))
+    mip.int_vars, mip.int_vars_lb, mip.int_vars_ub =
+        _get_int_variables(backend(prototype))
+    mip.sense = _get_objective_sense(backend(prototype))
+    _relax_integrality!(backend(prototype))
     @threads for t = 1:nthreads()
-        model = direct_model(mip.constructor)
+        model = Model(mip.constructor)
         MOI.copy_to(model, backend(prototype))
-        _replace_zero_one!(backend(model))
-        if t == 1
-            _assert_supported(backend(model))
-            mip.int_vars, mip.int_vars_lb, mip.int_vars_ub =
-                _get_int_variables(backend(model))
-            mip.sense = _get_objective_sense(backend(model))
-        end
-        _relax_integrality!(backend(model))
         mip.optimizers[t] = backend(model)
         set_silent(model)
     end

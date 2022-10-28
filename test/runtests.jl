@@ -3,11 +3,19 @@
 #  Released under the modified BSD license. See COPYING.md for more details.
 
 using Test
+using Requires
 using MIPLearn
-
 MIPLearn.setup_logger()
-const is_gurobi_available = ("GUROBI_HOME" in keys(ENV))
-const is_cplex_available = ("CPLEX_STUDIO_BINARIES" in keys(ENV))
+
+is_cplex_available = false
+@require CPLEX = "a076750e-1247-5638-91d2-ce28b192dca0" begin
+    is_cplex_available = true
+end
+
+is_gurobi_available = false
+@require Gurobi = "2e9cd046-0924-5485-92f1-d5272153d98b" begin
+    is_gurobi_available = true
+end
 
 @testset "MIPLearn" begin
     include("fixtures/knapsack.jl")
