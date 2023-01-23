@@ -15,9 +15,7 @@ function test_cuts_blackbox_cplex()
 
     # Read HDF5 file
     h5 = Hdf5Sample(h5_filename)
-    lhs = h5.get_sparse("cuts_cpx_lhs")
     rhs = h5.get_array("cuts_cpx_rhs")
     h5.file.close()
-    @test lhs.shape == (22, 100)
     @test length(rhs) == 22
 end

@@ -82,7 +82,7 @@ function collect(
     cuts_rhs = Float64[]
     cuts_var_names = String[]
 
-    for i in 0:(nvars-1)
+    for i in 1:nvars
         push!(cuts_var_names, name(VariableRef(model, MOI.VariableIndex(i))))
     end
 
@@ -92,7 +92,11 @@ function collect(
             c = constraint_object(conRef)
             cset = MOI.get(conRef.model.moi_backend, MOI.ConstraintSet(), conRef.index)
             for (key, val) in c.func.terms
-                cuts_lhs[offset, key.index.value] = val
+                idx = key.index.value
+                if (idx < 1 || idx > nvars)
+                    error("invalid index: $idx")
+                end
+                cuts_lhs[offset, idx - 1] = val
             end
             push!(cuts_rhs, cset.upper)
             offset += 1
