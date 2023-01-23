@@ -36,13 +36,13 @@ function collect(
     CPXsetintparam(env, CPX_PARAM_NODELIM, 0)
 
     # Parameter: Make cutting plane generation more aggresive
-    CPXsetintparam(env, CPX_PARAM_AGGCUTLIM, 100)
-    CPXsetintparam(env, CPX_PARAM_FRACCAND, 1000)
     CPXsetintparam(env, CPX_PARAM_FRACCUTS, 2)
-    CPXsetintparam(env, CPX_PARAM_FRACPASS, 100)
-    CPXsetintparam(env, CPX_PARAM_GUBCOVERS, 100)
     CPXsetintparam(env, CPX_PARAM_MIRCUTS, 2)
     CPXsetintparam(env, CPX_PARAM_ZEROHALFCUTS, 2)
+    # CPXsetintparam(env, CPX_PARAM_AGGCUTLIM, 100)
+    # CPXsetintparam(env, CPX_PARAM_FRACCAND, 1000)
+    # CPXsetintparam(env, CPX_PARAM_FRACPASS, 100)
+    # CPXsetintparam(env, CPX_PARAM_GUBCOVERS, 100)
 
     # Load problem
     lp = CPXcreateprob(env, status_p, "problem")
@@ -70,37 +70,35 @@ function collect(
     # Load generated MPS file
     model = JuMP.read_from_file("$tempdir/root.mps")
 
+    function select(cr)
+        return name(cr)[begin] in ['i', 'f', 'm', 'r', 'L', 'z', 'v'] &&  isdigit(name(cr)[begin+1])
+    end
+
     # Parse cuts
-    cuts_lhs::Vector{Vector{Float64}} = []
-    cuts_rhs::Vector{Float64} = []
-    nvars = num_variables(model)
     constraints = all_constraints(model, GenericAffExpr{Float64,VariableRef}, MOI.LessThan{Float64})
+    nvars = num_variables(model)
+    ncuts = length([cr for cr in constraints if select(cr)])
+    cuts_lhs = spzeros(ncuts, nvars)
+    cuts_rhs = Float64[]
+
+    offset = 1
     for conRef in constraints
-        if name(conRef)[begin] in ['i', 'f', 'm', 'r', 'L', 'z', 'v'] &&
-            isdigit(name(conRef)[begin+1])
+        if select(conRef)
             c = constraint_object(conRef)
             cset = MOI.get(conRef.model.moi_backend, MOI.ConstraintSet(), conRef.index)
-            lhs = zeros(nvars)
             for (key, val) in c.func.terms
-                lhs[key.index.value] = val
+                cuts_lhs[offset, key.index.value] = val
             end
-            push!(cuts_lhs, lhs)
             push!(cuts_rhs, cset.upper)
+            offset += 1
         end
     end
-    @info "$(length(cuts_lhs)) CPLEX cuts collected"
-    cuts_lhs_matrix::Matrix{Float64} = vcat(cuts_lhs'...)
-
-    # Store cuts in HDF5 file
-    h5open(h5_filename, "r+") do h5
-        for key in ["cuts_cpx_lhs", "cuts_cpx_rhs"]
-            if haskey(h5, key)
-                delete_object(h5, key)
-            end
-        end
-        write(h5, "cuts_cpx_lhs", cuts_lhs_matrix)
-        write(h5, "cuts_cpx_rhs", cuts_rhs)
-    end
+    
+    @info "Storing $(length(cuts_rhs)) CPLEX cuts..."
+    h5 = Hdf5Sample(h5_filename)
+    h5.put_sparse("cuts_cpx_lhs", cuts_lhs)
+    h5.put_array("cuts_cpx_rhs", cuts_rhs)
+    h5.file.close()
 
     return
 end
