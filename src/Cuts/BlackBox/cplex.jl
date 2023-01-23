@@ -35,6 +35,15 @@ function collect(
     # Parameter: Stop processing at the root node
     CPXsetintparam(env, CPX_PARAM_NODELIM, 0)
 
+    # Parameter: Make cutting plane generation more aggresive
+    CPXsetintparam(env, CPX_PARAM_AGGCUTLIM, 100)
+    CPXsetintparam(env, CPX_PARAM_FRACCAND, 1000)
+    CPXsetintparam(env, CPX_PARAM_FRACCUTS, 2)
+    CPXsetintparam(env, CPX_PARAM_FRACPASS, 100)
+    CPXsetintparam(env, CPX_PARAM_GUBCOVERS, 100)
+    CPXsetintparam(env, CPX_PARAM_MIRCUTS, 2)
+    CPXsetintparam(env, CPX_PARAM_ZEROHALFCUTS, 2)
+
     # Load problem
     lp = CPXcreateprob(env, status_p, "problem")
     CPXreadcopyprob(env, lp, mps_filename, "mps")
@@ -79,6 +88,7 @@ function collect(
             push!(cuts_rhs, cset.upper)
         end
     end
+    @info "$(length(cuts_lhs)) CPLEX cuts collected"
     cuts_lhs_matrix::Matrix{Float64} = vcat(cuts_lhs'...)
 
     # Store cuts in HDF5 file

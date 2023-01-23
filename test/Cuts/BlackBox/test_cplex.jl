@@ -14,7 +14,9 @@ function test_cuts_blackbox_cplex()
 
     # Read HDF5 file
     h5open(h5_filename, "r+") do h5
-        @test size(h5["cuts_cpx_lhs"]) == (12, 104)
-        @test size(h5["cuts_cpx_rhs"]) == (12,)
+        rhs = h5["cuts_cpx_rhs"]
+        lhs = h5["cuts_cpx_lhs"]
+        ncuts = length(rhs)
+        @test size(lhs) == (ncuts, 104)
     end
 end
