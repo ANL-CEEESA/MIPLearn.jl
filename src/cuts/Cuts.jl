@@ -4,11 +4,11 @@
 
 module Cuts
 
-include("structs.jl")
-include("moi.jl")
-include("transform.jl")
-include("tableau.jl")
-include("gmi.jl")
-include("collect.jl")
+include("tableau/structs.jl")
+include("tableau/moi.jl")
+include("tableau/transform.jl")
+include("tableau/tableau.jl")
+include("tableau/gmi.jl")
+include("tableau/collect.jl")
 
 end # module
