@@ -43,7 +43,8 @@ function PyObject(m::SparseMatrixCSC)
     ).tocoo()
 end
 
-
 include("Cuts/BlackBox/cplex.jl")
+
+export Hdf5Sample
 
 end # module

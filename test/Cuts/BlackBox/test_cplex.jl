@@ -3,6 +3,7 @@
 #  Released under the modified BSD license. See COPYING.md for more details.
 
 using HDF5
+using MIPLearn
 
 function test_cuts_blackbox_cplex()
     # Prepare filenames
@@ -13,10 +14,10 @@ function test_cuts_blackbox_cplex()
     MIPLearn.collect(mps_filename, CplexBlackBoxCuts())
 
     # Read HDF5 file
-    h5open(h5_filename, "r+") do h5
-        rhs = h5["cuts_cpx_rhs"]
-        lhs = h5["cuts_cpx_lhs"]
-        ncuts = length(rhs)
-        @test size(lhs) == (ncuts, 104)
-    end
+    h5 = Hdf5Sample(h5_filename)
+    lhs = h5.get_sparse("cuts_cpx_lhs")
+    rhs = h5.get_array("cuts_cpx_rhs")
+    h5.file.close()
+    @test lhs.shape == (22, 100)
+    @test length(rhs) == 22
 end

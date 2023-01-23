@@ -80,6 +80,11 @@ function collect(
     ncuts = length([cr for cr in constraints if select(cr)])
     cuts_lhs = spzeros(ncuts, nvars)
     cuts_rhs = Float64[]
+    cuts_var_names = String[]
+
+    for i in 0:(nvars-1)
+        push!(cuts_var_names, name(VariableRef(model, MOI.VariableIndex(i))))
+    end
 
     offset = 1
     for conRef in constraints
@@ -98,6 +103,7 @@ function collect(
     h5 = Hdf5Sample(h5_filename)
     h5.put_sparse("cuts_cpx_lhs", cuts_lhs)
     h5.put_array("cuts_cpx_rhs", cuts_rhs)
+    h5.put_array("cuts_cpx_var_names", to_str_array(cuts_var_names))
     h5.file.close()
 
     return
