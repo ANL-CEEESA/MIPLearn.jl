@@ -8,6 +8,7 @@ using HDF5
 
 Base.@kwdef struct CplexBlackBoxCuts
     threads::Int = 1
+    aggressive::Bool = false
 end
 
 function _add_mip_start!(env, lp, x::Vector{Float32})
@@ -56,9 +57,11 @@ function collect(
     CPXsetintparam(env, CPX_PARAM_THREADS, method.threads)
 
     # Parameter: Make cutting plane generation more aggresive
-    CPXsetintparam(env, CPX_PARAM_FRACCUTS, 2)
-    CPXsetintparam(env, CPX_PARAM_MIRCUTS, 2)
-    CPXsetintparam(env, CPX_PARAM_ZEROHALFCUTS, 2)
+    if method.aggressive
+        CPXsetintparam(env, CPX_PARAM_FRACCUTS, 2)
+        CPXsetintparam(env, CPX_PARAM_MIRCUTS, 2)
+        CPXsetintparam(env, CPX_PARAM_ZEROHALFCUTS, 2)
+    end
 
     # Load problem
     lp = CPXcreateprob(env, status_p, "problem")
