@@ -6,11 +6,28 @@ using CPLEX
 using JuMP
 using HDF5
 
-struct CplexBlackBoxCuts end
+Base.@kwdef struct CplexBlackBoxCuts
+    threads::Int = 1
+end
+
+function _add_mip_start!(env, lp, x::Vector{Float32})
+    rval = CPXaddmipstarts(
+        env,
+        lp,
+        1,  # mcnt
+        length(x),  # nzcnt
+        Cint[0],  # beg
+        Cint[i - 1 for i = 1:length(x)],  # varindices
+        Cdouble[xi for xi in x],
+        C_NULL,  # effortlevel
+        C_NULL,  # mipstartname
+    )
+    rval == 0 || error("CPXaddmipstarts failed: $rval")
+end
 
 function collect(
     mps_filename::String,
-    ::CplexBlackBoxCuts,
+    method::CplexBlackBoxCuts,
 )::Nothing
     tempdir = mktempdir()
     isfile(mps_filename) || error("file not found: $mps_filename")
@@ -35,18 +52,23 @@ function collect(
     # Parameter: Stop processing at the root node
     CPXsetintparam(env, CPX_PARAM_NODELIM, 0)
 
+    # Parameter: Limit number of threads
+    CPXsetintparam(env, CPX_PARAM_THREADS, method.threads)
+
     # Parameter: Make cutting plane generation more aggresive
     CPXsetintparam(env, CPX_PARAM_FRACCUTS, 2)
     CPXsetintparam(env, CPX_PARAM_MIRCUTS, 2)
     CPXsetintparam(env, CPX_PARAM_ZEROHALFCUTS, 2)
-    # CPXsetintparam(env, CPX_PARAM_AGGCUTLIM, 100)
-    # CPXsetintparam(env, CPX_PARAM_FRACCAND, 1000)
-    # CPXsetintparam(env, CPX_PARAM_FRACPASS, 100)
-    # CPXsetintparam(env, CPX_PARAM_GUBCOVERS, 100)
 
     # Load problem
     lp = CPXcreateprob(env, status_p, "problem")
     CPXreadcopyprob(env, lp, mps_filename, "mps")
+
+    # Load warm start
+    h5 = Hdf5Sample(h5_filename)
+    var_values = h5.get_array("mip_var_values")
+    h5.file.close()
+    _add_mip_start!(env, lp, var_values)
 
     # Define callback
     function solve_callback(env, cbdata, wherefrom, cbhandle, useraction_p)::Int32
