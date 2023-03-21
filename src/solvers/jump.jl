@@ -12,7 +12,24 @@ function _add_constrs(
     constrs_sense,
     constrs_rhs,
     stats,
-) end
+)
+    n, m = length(var_names), length(constrs_rhs)
+    vars = [variable_by_name(model, v) for v in var_names]
+    for i = 1:m
+        lhs = sum(constrs_lhs[i, j] * vars[j] for j = 1:n)
+        sense = constrs_sense[i]
+        rhs = constrs_rhs[i]
+        if sense == "="
+            @constraint(model, lhs == rhs)
+        elseif sense == ">"
+            @constraint(model, lhs >= rhs)
+        elseif sense == "<"
+            @constraint(model, lhs <= rhs)
+        else
+            error("Unknown sense: $sense")
+        end
+    end
+end
 
 function _extract_after_load(model::JuMP.Model, h5)
     if JuMP.objective_sense(model) == MOI.MIN_SENSE
@@ -230,7 +247,12 @@ function _extract_after_mip(model::JuMP.Model, h5)
     h5.put_array("mip_constr_slacks", slacks)
 end
 
-function _fix_variables(model::JuMP.Model, var_names, var_values, stats) end
+function _fix_variables(model::JuMP.Model, var_names, var_values, stats)
+    vars = [variable_by_name(model, v) for v in var_names]
+    for (i, var) in enumerate(vars)
+        fix(var, var_values[i], force=true)
+    end
+end
 
 function _optimize(model::JuMP.Model)
     optimize!(model)
@@ -245,9 +267,18 @@ function _relax(model::JuMP.Model)
     return relaxed
 end
 
-function _set_warm_starts(model::JuMP.Model, var_names, var_values, stats) end
+function _set_warm_starts(model::JuMP.Model, var_names, var_values, stats)
+    (n_starts, _) = size(var_values)
+    n_starts == 1 || error("JuMP does not support multiple warm starts")
+    vars = [variable_by_name(model, v) for v in var_names]
+    for (i, var) in enumerate(vars)
+        set_start_value(var, var_values[i])
+    end
+end
 
-function _write(model::JuMP.Model, filename) end
+function _write(model::JuMP.Model, filename)
+    write_to_file(model, filename)
+end
 
 # -----------------------------------------------------------------------------
 
@@ -258,15 +289,21 @@ function __init_solvers_jump__()
             self.inner = inner
         end
 
-        add_constrs(self, var_names, constrs_lhs, constrs_sense, constrs_rhs, stats) =
-            _add_constrs(
-                self.inner,
-                var_names,
-                constrs_lhs,
-                constrs_sense,
-                constrs_rhs,
-                stats,
-            )
+        add_constrs(
+            self,
+            var_names,
+            constrs_lhs,
+            constrs_sense,
+            constrs_rhs,
+            stats = nothing,
+        ) = _add_constrs(
+            self.inner,
+            from_str_array(var_names),
+            constrs_lhs,
+            from_str_array(constrs_sense),
+            constrs_rhs,
+            stats,
+        )
 
         extract_after_load(self, h5) = _extract_after_load(self.inner, h5)
 
@@ -274,15 +311,15 @@ function __init_solvers_jump__()
 
         extract_after_mip(self, h5) = _extract_after_mip(self.inner, h5)
 
-        fix_variables(self, var_names, var_values, stats) =
-            _fix_variables(self.inner, var_names, var_values, stats)
+        fix_variables(self, var_names, var_values, stats = nothing) =
+            _fix_variables(self.inner, from_str_array(var_names), var_values, stats)
 
         optimize(self) = _optimize(self.inner)
 
         relax(self) = Class(_relax(self.inner))
 
-        set_warm_starts(self, var_names, var_values, stats) =
-            _set_warm_starts(self.inner, var_names, var_values, stats)
+        set_warm_starts(self, var_names, var_values, stats = nothing) =
+            _set_warm_starts(self.inner, from_str_array(var_names), var_values, stats)
 
         write(self, filename) = _write(self.inner, filename)
     end
