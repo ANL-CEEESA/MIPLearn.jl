@@ -4,7 +4,6 @@
 
 using CPLEX
 using JuMP
-using HDF5
 
 Base.@kwdef struct CplexBlackBoxCuts
     threads::Int = 1
@@ -26,10 +25,7 @@ function _add_mip_start!(env, lp, x::Vector{Float32})
     rval == 0 || error("CPXaddmipstarts failed: $rval")
 end
 
-function collect(
-    mps_filename::String,
-    method::CplexBlackBoxCuts,
-)::Nothing
+function collect(mps_filename::String, method::CplexBlackBoxCuts)::Nothing
     tempdir = mktempdir()
     isfile(mps_filename) || error("file not found: $mps_filename")
     h5_filename = replace(mps_filename, ".mps.gz" => ".h5")
@@ -47,8 +43,8 @@ function collect(
     CPXsetintparam(env, CPX_PARAM_PREDUAL, -1)
     CPXsetintparam(env, CPX_PARAM_PRESLVND, -1)
 
-    # Parameter: Enable logging
-    CPXsetintparam(env, CPX_PARAM_SCRIND, 1)
+    # Parameter: Disable logging
+    CPXsetintparam(env, CPX_PARAM_SCRIND, 0)
 
     # Parameter: Stop processing at the root node
     CPXsetintparam(env, CPX_PARAM_NODELIM, 0)
@@ -68,7 +64,7 @@ function collect(
     CPXreadcopyprob(env, lp, mps_filename, "mps")
 
     # Load warm start
-    h5 = Hdf5Sample(h5_filename)
+    h5 = H5File(h5_filename)
     var_values = h5.get_array("mip_var_values")
     h5.file.close()
     _add_mip_start!(env, lp, var_values)
@@ -80,13 +76,17 @@ function collect(
         CPXwriteprob(env, nodelp_p[1], "$tempdir/root.mps", C_NULL)
         return 0
     end
-    c_solve_callback = @cfunction($solve_callback, Cint, (
-        CPXENVptr,  # env
-        Ptr{Cvoid}, # cbdata
-        Cint,       # wherefrom
-        Ptr{Cvoid}, # cbhandle
-        Ptr{Cint},  # useraction_p
-    ))
+    c_solve_callback = @cfunction(
+        $solve_callback,
+        Cint,
+        (
+            CPXENVptr,  # env
+            Ptr{Cvoid}, # cbdata
+            Cint,       # wherefrom
+            Ptr{Cvoid}, # cbhandle
+            Ptr{Cint},  # useraction_p
+        )
+    )
     CPXsetsolvecallbackfunc(env, c_solve_callback, C_NULL)
 
     # Run optimization
@@ -96,18 +96,20 @@ function collect(
     model = JuMP.read_from_file("$tempdir/root.mps")
 
     function select(cr)
-        return name(cr)[begin] in ['i', 'f', 'm', 'r', 'L', 'z', 'v'] &&  isdigit(name(cr)[begin+1])
+        return name(cr)[begin] in ['i', 'f', 'm', 'r', 'L', 'z', 'v'] &&
+               isdigit(name(cr)[begin+1])
     end
 
     # Parse cuts
-    constraints = all_constraints(model, GenericAffExpr{Float64,VariableRef}, MOI.LessThan{Float64})
+    constraints =
+        all_constraints(model, GenericAffExpr{Float64,VariableRef}, MOI.LessThan{Float64})
     nvars = num_variables(model)
     ncuts = length([cr for cr in constraints if select(cr)])
     cuts_lhs = spzeros(ncuts, nvars)
     cuts_rhs = Float64[]
     cuts_var_names = String[]
 
-    for i in 1:nvars
+    for i = 1:nvars
         push!(cuts_var_names, name(VariableRef(model, MOI.VariableIndex(i))))
     end
 
@@ -121,20 +123,18 @@ function collect(
                 if (idx < 1 || idx > nvars)
                     error("invalid index: $idx")
                 end
-                cuts_lhs[offset, idx - 1] = val
+                cuts_lhs[offset, idx-1] = val
             end
             push!(cuts_rhs, cset.upper)
             offset += 1
         end
     end
-    
-    @info "Storing $(length(cuts_rhs)) CPLEX cuts..."
-    h5 = Hdf5Sample(h5_filename)
+
+    h5 = H5File(h5_filename)
     h5.put_sparse("cuts_cpx_lhs", cuts_lhs)
     h5.put_array("cuts_cpx_rhs", cuts_rhs)
     h5.put_array("cuts_cpx_var_names", to_str_array(cuts_var_names))
-    h5.file.close()
-
+    h5.close()
     return
 end
 
