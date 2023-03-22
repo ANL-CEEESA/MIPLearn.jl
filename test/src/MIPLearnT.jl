@@ -11,6 +11,7 @@ FIXTURES = "$BASEDIR/../fixtures"
 
 include("fixtures.jl")
 
+include("BB/test_bb.jl")
 include("Cuts/BlackBox/test_cplex.jl")
 include("problems/test_setcover.jl")
 include("test_io.jl")
@@ -19,6 +20,9 @@ include("test_usage.jl")
 
 function runtests()
     @testset "MIPLearn" begin
+        @testset "BB" begin
+            test_bb()
+        end
         test_cuts_blackbox_cplex()
         test_io()
         test_problems_setcover()

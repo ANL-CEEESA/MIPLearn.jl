@@ -7,8 +7,6 @@ module MIPLearn
 using PyCall
 using SparseArrays
 
-include("Cuts/BlackBox/cplex.jl")
-
 include("collectors.jl")
 include("components.jl")
 include("extractors.jl")
@@ -26,5 +24,8 @@ function __init__()
     __init_solvers_jump__()
     __init_solvers_learning__()
 end
+
+include("BB/BB.jl")
+include("Cuts/BlackBox/cplex.jl")
 
 end # module
