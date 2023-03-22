@@ -1,4 +1,6 @@
 global H5File = PyNULL()
+global write_pkl_gz = PyNULL()
+global read_pkl_gz = PyNULL()
 
 to_str_array(values) = py"to_str_array"(values)
 
@@ -6,6 +8,8 @@ from_str_array(values) = py"from_str_array"(values)
 
 function __init_io__()
     copy!(H5File, pyimport("miplearn.h5").H5File)
+    copy!(write_pkl_gz, pyimport("miplearn.io").write_pkl_gz)
+    copy!(read_pkl_gz, pyimport("miplearn.io").read_pkl_gz)
 
     py"""
     import numpy as np
@@ -32,4 +36,4 @@ function PyObject(m::SparseMatrixCSC)
     ).tocoo()
 end
 
-export H5File
+export H5File, write_pkl_gz, read_pkl_gz

@@ -1,5 +1,18 @@
 using MIPLearn
 
+function test_io()
+    test_pkl_gz()
+    test_h5()
+end
+
+function test_pkl_gz()
+    original = Dict("K1" => 1, "K2" => [0, 1, 2], "K3" => "Hello")
+    dirname = tempdir()
+    MIPLearn.write_pkl_gz([original], dirname)
+    recovered = MIPLearn.read_pkl_gz("$dirname/00000.pkl.gz")
+    @test recovered == original
+end
+
 function test_h5()
     h5 = H5File(tempname(), "w")
     _test_roundtrip_scalar(h5, "A")

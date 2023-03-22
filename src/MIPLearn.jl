@@ -7,15 +7,24 @@ module MIPLearn
 using PyCall
 using SparseArrays
 
-include("problems/setcover.jl")
-include("io.jl")
-include("solvers/jump.jl")
 include("Cuts/BlackBox/cplex.jl")
 
+include("collectors.jl")
+include("components.jl")
+include("extractors.jl")
+include("io.jl")
+include("problems/setcover.jl")
+include("solvers/jump.jl")
+include("solvers/learning.jl")
+
 function __init__()
-    __init_problems_setcover__()
+    __init_collectors__()
+    __init_components__()
+    __init_extractors__()
     __init_io__()
+    __init_problems_setcover__()
     __init_solvers_jump__()
+    __init_solvers_learning__()
 end
 
 end # module

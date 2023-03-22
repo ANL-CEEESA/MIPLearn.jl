@@ -250,12 +250,14 @@ end
 function _fix_variables(model::JuMP.Model, var_names, var_values, stats)
     vars = [variable_by_name(model, v) for v in var_names]
     for (i, var) in enumerate(vars)
-        fix(var, var_values[i], force=true)
+        fix(var, var_values[i], force = true)
     end
 end
 
 function _optimize(model::JuMP.Model)
     optimize!(model)
+    flush(stdout)
+    Libc.flush_cstdio()
 end
 
 function _relax(model::JuMP.Model)
@@ -325,3 +327,5 @@ function __init_solvers_jump__()
     end
     copy!(JumpModel, Class)
 end
+
+export JumpModel
