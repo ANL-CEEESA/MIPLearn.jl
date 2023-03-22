@@ -26,6 +26,6 @@ function __init__()
 end
 
 include("BB/BB.jl")
-include("Cuts/BlackBox/cplex.jl")
+include("Cuts/Cuts.jl")
 
 end # module

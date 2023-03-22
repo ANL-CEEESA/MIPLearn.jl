@@ -3,7 +3,7 @@
 #  Released under the modified BSD license. See COPYING.md for more details.
 
 using HDF5
-using MIPLearn
+using MIPLearn.Cuts
 
 function test_cuts_blackbox_cplex()
     # Prepare filenames
@@ -11,7 +11,7 @@ function test_cuts_blackbox_cplex()
     h5_filename = replace(mps_filename, ".mps.gz" => ".h5")
 
     # Run collector
-    MIPLearn.collect(mps_filename, CplexBlackBoxCuts())
+    Cuts.collect(mps_filename, CplexBlackBoxCuts())
 
     # Read HDF5 file
     h5 = H5File(h5_filename)
