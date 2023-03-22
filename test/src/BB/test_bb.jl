@@ -99,8 +99,8 @@ function bb_run(optimizer_name, optimizer; large = true)
                     @time BB.solve!(
                         mip,
                         initial_primal_bound = mip_primal_bound,
-                        print_interval = 10,
-                        node_limit = 100,
+                        print_interval = 1,
+                        node_limit = 25,
                         branch_rule = branch_rule,
                     )
                 end
