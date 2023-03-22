@@ -1,3 +1,7 @@
+#  MIPLearn: Extensible Framework for Learning-Enhanced Mixed-Integer Optimization
+#  Copyright (C) 2020-2023, UChicago Argonne, LLC. All rights reserved.
+#  Released under the modified BSD license. See COPYING.md for more details.
+
 global H5File = PyNULL()
 global write_pkl_gz = PyNULL()
 global read_pkl_gz = PyNULL()

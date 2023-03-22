@@ -1,8 +1,5 @@
 <h1 align="center">MIPLearn.jl</h1>
 <p align="center">
-  <a href="https://github.com/ANL-CEEESA/MIPLearn.jl/actions">
-    <img src="https://github.com/ANL-CEEESA/MIPLearn.jl/workflows/Test/badge.svg">
-  </a>
   <a href="https://doi.org/10.5281/zenodo.4287567">
     <img src="https://zenodo.org/badge/DOI/10.5281/zenodo.4287567.svg">
   </a>
@@ -11,7 +8,7 @@
   </a>
 </p>
 
-**MIPLearn** is an extensible open-source framework for solving discrete optimization problems using a combination of Mixed-Integer Linear Programming (MIP) and Machine Learning (ML). See the [main repository](https://github.com/ANL-CEEESA/MIPLearn) for more information. This repository holds an experimental Julia interface for the package. See [getting started tutorial](https://github.com/ANL-CEEESA/MIPLearn.jl/blob/dev/docs/getting-started.ipynb).
+**MIPLearn** is an extensible open-source framework for solving discrete optimization problems using a combination of Mixed-Integer Linear Programming (MIP) and Machine Learning (ML). See the [main repository](https://github.com/ANL-CEEESA/MIPLearn) for more information. This repository holds an experimental Julia interface for the package.
 
 [miplearn]: https://github.com/ANL-CEEESA/MIPLearn
 
