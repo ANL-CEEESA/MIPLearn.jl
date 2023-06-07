@@ -3,7 +3,7 @@
 #  Released under the modified BSD license. See COPYING.md for more details.
 
 using Clp
-using CPLEX
+# using CPLEX
 using HiGHS
 using JuMP
 using Test
@@ -130,5 +130,5 @@ end
 function test_bb()
     @time bb_run("Clp", optimizer_with_attributes(Clp.Optimizer))
     @time bb_run("HiGHS", optimizer_with_attributes(HiGHS.Optimizer))
-    @time bb_run("CPLEX", optimizer_with_attributes(CPLEX.Optimizer, "CPXPARAM_Threads" => 1))
+    # @time bb_run("CPLEX", optimizer_with_attributes(CPLEX.Optimizer, "CPXPARAM_Threads" => 1))
 end

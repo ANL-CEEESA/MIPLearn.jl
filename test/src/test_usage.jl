@@ -6,10 +6,10 @@ function test_usage()
     LogisticRegression = pyimport("sklearn.linear_model").LogisticRegression
 
     @debug "Generating data files..."
-    dirname = tempdir()
+    dirname = mktempdir()
     data = [fixture_setcover_data()]
     data_filenames = write_pkl_gz(data, dirname)
-    h5_filenames = ["$(f).h5" for f in data_filenames]
+    h5_filenames = [replace(f, ".pkl.gz" => ".h5") for f in data_filenames]
 
     @debug "Setting up LearningSolver..."
     solver = LearningSolver(

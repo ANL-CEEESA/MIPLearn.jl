@@ -4,7 +4,6 @@ authors = ["Alinson S Xavier <git@axavier.org>"]
 version = "0.3.0"
 
 [deps]
-CPLEX = "a076750e-1247-5638-91d2-ce28b192dca0"
 Conda = "8f4d0f93-b110-5947-807f-2305c1781a2d"
 DataStructures = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
 HDF5 = "f67ccb44-e63f-5c2f-98bd-6dc0ccc4ba2f"

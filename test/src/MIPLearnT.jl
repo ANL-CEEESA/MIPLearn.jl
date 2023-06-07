@@ -27,7 +27,7 @@ function runtests()
         @testset "BB" begin
             test_bb()
         end
-        test_cuts_blackbox_cplex()
+        # test_cuts_blackbox_cplex()
         test_io()
         test_problems_setcover()
         test_solvers_jump()
