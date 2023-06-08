@@ -2,6 +2,9 @@
 #  Copyright (C) 2020-2023, UChicago Argonne, LLC. All rights reserved.
 #  Released under the modified BSD license. See COPYING.md for more details.
 
+using Printf
+using JLD2
+
 global H5File = PyNULL()
 global write_pkl_gz = PyNULL()
 global read_pkl_gz = PyNULL()
@@ -36,8 +39,27 @@ end
 function PyObject(m::SparseMatrixCSC)
     pyimport("scipy.sparse").csc_matrix(
         (m.nzval, m.rowval .- 1, m.colptr .- 1),
-        shape = size(m),
+        shape=size(m),
     ).tocoo()
 end
 
-export H5File, write_pkl_gz, read_pkl_gz
+function write_jld2(
+    objs::Vector,
+    dirname::AbstractString;
+    prefix::AbstractString=""
+)::Vector{String}
+    mkpath(dirname)
+    filenames = [@sprintf("%s/%s%05d.jld2", dirname, prefix, i) for i = 1:length(objs)]
+    for (i, obj) in enumerate(objs)
+        jldsave(filenames[i]; obj)
+    end
+    return filenames
+end
+
+function read_jld2(filename::AbstractString)::Any
+    jldopen(filename, "r") do file
+        return file["obj"]
+    end
+end
+
+export H5File, write_pkl_gz, read_pkl_gz, write_jld2, read_jld2

@@ -278,7 +278,9 @@ function _set_warm_starts(model::JuMP.Model, var_names, var_values, stats)
     n_starts == 1 || error("JuMP does not support multiple warm starts")
     vars = [variable_by_name(model, v) for v in var_names]
     for (i, var) in enumerate(vars)
-        set_start_value(var, var_values[i])
+        if isfinite(var_values[i])
+            set_start_value(var, var_values[i])
+        end
     end
 end
 

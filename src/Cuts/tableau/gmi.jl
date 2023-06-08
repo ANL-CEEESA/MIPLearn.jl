@@ -7,32 +7,28 @@ using TimerOutputs
 
 @inline frac(x::Float64) = x - floor(x)
 
-function select_gmi_rows(data, basis, x; max_rows=10, atol=0.001)
+function select_gmi_rows(data, basis, x; max_rows = 10, atol = 0.001)
     candidate_rows = [
-        r
-        for r in 1:length(basis.var_basic)
-        if (data.var_types[basis.var_basic[r]] != 'C') && (frac(x[basis.var_basic[r]]) > atol)
+        r for
+        r = 1:length(basis.var_basic) if (data.var_types[basis.var_basic[r]] != 'C') &&
+        (frac(x[basis.var_basic[r]]) > atol)
     ]
     candidate_vals = frac.(x[basis.var_basic[candidate_rows]])
     score = abs.(candidate_vals .- 0.5)
     perm = sortperm(score)
-    return [candidate_rows[perm[i]] for i in 1:min(length(perm), max_rows)]
+    return [candidate_rows[perm[i]] for i = 1:min(length(perm), max_rows)]
 end
 
-function compute_gmi(
-    data::ProblemData,
-    tableau::Tableau,
-    tol=1e-8,
-)::ConstraintSet
+function compute_gmi(data::ProblemData, tableau::Tableau, tol = 1e-8)::ConstraintSet
     nrows, ncols = size(tableau.lhs)
-    ub = Float64[Inf for _ in 1:nrows]
-    lb = Float64[0.999 for _ in 1:nrows]
+    ub = Float64[Inf for _ = 1:nrows]
+    lb = Float64[0.999 for _ = 1:nrows]
     tableau_I, tableau_J, tableau_V = findnz(tableau.lhs)
     lhs_I = Int[]
     lhs_J = Int[]
     lhs_V = Float64[]
     @timeit "Compute coefficients" begin
-        for k in 1:nnz(tableau.lhs)
+        for k = 1:nnz(tableau.lhs)
             i::Int = tableau_I[k]
             v::Float64 = 0.0
             alpha_j = frac(tableau_V[k])
@@ -61,12 +57,8 @@ function compute_gmi(
     return ConstraintSet(; lhs, ub, lb)
 end
 
-function assert_cuts_off(
-    cuts::ConstraintSet,
-    x::Vector{Float64},
-    tol=1e-6
-)
-    for i in 1:length(cuts.lb)
+function assert_cuts_off(cuts::ConstraintSet, x::Vector{Float64}, tol = 1e-6)
+    for i = 1:length(cuts.lb)
         val = cuts.lhs[i, :]' * x
         if (val <= cuts.ub[i] - tol) && (val >= cuts.lb[i] + tol)
             throw(ErrorException("inequality fails to cut off fractional solution"))
@@ -74,17 +66,17 @@ function assert_cuts_off(
     end
 end
 
-function assert_does_not_cut_off(
-    cuts::ConstraintSet,
-    x::Vector{Float64};
-    tol=1e-6
-)
-    for i in 1:length(cuts.lb)
+function assert_does_not_cut_off(cuts::ConstraintSet, x::Vector{Float64}; tol = 1e-6)
+    for i = 1:length(cuts.lb)
         val = cuts.lhs[i, :]' * x
         ub = cuts.ub[i]
         lb = cuts.lb[i]
         if (val >= ub) || (val <= lb)
-            throw(ErrorException("inequality $i cuts off integer solution ($lb <= $val <= $ub)"))
+            throw(
+                ErrorException(
+                    "inequality $i cuts off integer solution ($lb <= $val <= $ub)",
+                ),
+            )
         end
     end
 end

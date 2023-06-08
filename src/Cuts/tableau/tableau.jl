@@ -56,8 +56,8 @@ function compute_tableau(
     data::ProblemData,
     basis::Basis,
     x::Vector{Float64};
-    rows::Union{Vector{Int},Nothing}=nothing,
-    tol=1e-8
+    rows::Union{Vector{Int},Nothing} = nothing,
+    tol = 1e-8,
 )::Tableau
     @timeit "Split data" begin
         nrows, ncols = size(data.constr_lhs)
@@ -77,7 +77,7 @@ function compute_tableau(
         tableau_lhs_I = Int[]
         tableau_lhs_J = Int[]
         tableau_lhs_V = Float64[]
-        for k in 1:length(rows)
+        for k = 1:length(rows)
             @timeit "Prepare inputs" begin
                 i = rows[k]
                 e = zeros(nrows)
@@ -100,13 +100,8 @@ function compute_tableau(
                 end
             end
         end
-        tableau_lhs = sparse(
-            tableau_lhs_I,
-            tableau_lhs_J,
-            tableau_lhs_V,
-            length(rows),
-            ncols,
-        )
+        tableau_lhs =
+            sparse(tableau_lhs_I, tableau_lhs_J, tableau_lhs_V, length(rows), ncols)
     end
 
     @timeit "Compute tableau RHS" begin
@@ -120,10 +115,10 @@ function compute_tableau(
     end
 
     return Tableau(
-        obj=tableau_obj,
-        lhs=tableau_lhs,
-        rhs=tableau_rhs,
-        z=dot(data.obj, x),
+        obj = tableau_obj,
+        lhs = tableau_lhs,
+        rhs = tableau_rhs,
+        z = dot(data.obj, x),
     )
 end
 

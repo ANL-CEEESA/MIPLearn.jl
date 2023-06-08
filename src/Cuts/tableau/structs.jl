@@ -17,17 +17,17 @@ Base.@kwdef mutable struct ProblemData
 end
 
 Base.@kwdef mutable struct Tableau
-    obj
-    lhs
-    rhs
-    z
+    obj::Any
+    lhs::Any
+    rhs::Any
+    z::Any
 end
 
 Base.@kwdef mutable struct Basis
-    var_basic
-    var_nonbasic
-    constr_basic
-    constr_nonbasic
+    var_basic::Any
+    var_nonbasic::Any
+    constr_basic::Any
+    constr_nonbasic::Any
 end
 
 Base.@kwdef mutable struct ConstraintSet

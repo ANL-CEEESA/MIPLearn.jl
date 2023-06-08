@@ -135,9 +135,8 @@ function _create_node(
     status, obj = solve_relaxation!(mip)
     if status == :Optimal
         vals = values(mip, mip.int_vars)
-        fractional_indices = [
-            j for j in 1:length(mip.int_vars) if 1e-6 < vals[j] - floor(vals[j]) < 1 - 1e-6
-        ]
+        fractional_indices =
+            [j for j = 1:length(mip.int_vars) if 1e-6 < vals[j] - floor(vals[j]) < 1 - 1e-6]
         fractional_values = vals[fractional_indices]
         fractional_variables = mip.int_vars[fractional_indices]
     else

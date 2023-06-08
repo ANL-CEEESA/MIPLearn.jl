@@ -27,11 +27,7 @@ function ProblemData(model::Model)::ProblemData
     for (ftype, stype) in list_of_constraint_types(model)
         for constr in all_constraints(model, ftype, stype)
             cset = MOI.get(constr.model.moi_backend, MOI.ConstraintSet(), constr.index)
-            cf = MOI.get(
-                constr.model.moi_backend,
-                MOI.ConstraintFunction(),
-                constr.index,
-            )
+            cf = MOI.get(constr.model.moi_backend, MOI.ConstraintFunction(), constr.index)
             if ftype == VariableRef
                 var_idx = cf.value
                 if stype == MOI.Integer || stype == MOI.ZeroOne
@@ -79,13 +75,7 @@ function ProblemData(model::Model)::ProblemData
 
     n = length(vars)
     m = constr_index - 1
-    constr_lhs = sparse(
-        constr_lhs_rows,
-        constr_lhs_cols,
-        constr_lhs_values,
-        m,
-        n,
-    )
+    constr_lhs = sparse(constr_lhs_rows, constr_lhs_cols, constr_lhs_values, m, n)
 
     @assert length(obj) == n
     @assert length(var_lb) == n
@@ -96,7 +86,7 @@ function ProblemData(model::Model)::ProblemData
     @assert length(constr_ub) == m
 
     return ProblemData(
-        obj_offset=0.0;
+        obj_offset = 0.0;
         obj,
         constr_lb,
         constr_ub,
@@ -104,11 +94,11 @@ function ProblemData(model::Model)::ProblemData
         var_lb,
         var_ub,
         var_types,
-        var_names
+        var_names,
     )
 end
 
-function to_model(data::ProblemData, tol=1e-6)::Model
+function to_model(data::ProblemData, tol = 1e-6)::Model
     model = Model()
 
     # Variables
@@ -153,7 +143,7 @@ function add_constraint_set(model::JuMP.Model, cs::ConstraintSet)
     vars = all_variables(model)
     nrows, _ = size(cs.lhs)
     constrs = []
-    for i in 1:nrows
+    for i = 1:nrows
         c = nothing
         if isinf(cs.ub[i])
             c = @constraint(model, cs.lb[i] <= dot(cs.lhs[i, :], vars))

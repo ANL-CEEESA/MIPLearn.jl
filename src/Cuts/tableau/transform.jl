@@ -13,7 +13,7 @@ function _isbounded(x)
     return true
 end
 
-function backwards!(transforms::Vector{Transform}, m::ConstraintSet; tol=1e-8)
+function backwards!(transforms::Vector{Transform}, m::ConstraintSet; tol = 1e-8)
     for t in reverse(transforms)
         backwards!(t, m)
     end
@@ -24,7 +24,7 @@ function backwards!(transforms::Vector{Transform}, m::ConstraintSet; tol=1e-8)
     end
 end
 
-function backwards(transforms::Vector{Transform}, m::ConstraintSet; tol=1e-8)
+function backwards(transforms::Vector{Transform}, m::ConstraintSet; tol = 1e-8)
     m2 = deepcopy(m)
     backwards!(transforms, m2; tol)
     return m2
@@ -68,7 +68,7 @@ Base.@kwdef mutable struct MoveVarUpperBoundsToConstrs <: Transform end
 function forward!(t::MoveVarUpperBoundsToConstrs, data::ProblemData)
     _, ncols = size(data.constr_lhs)
     data.constr_lhs = [data.constr_lhs; I]
-    data.constr_lb = [data.constr_lb; [-Inf for _ in 1:ncols]]
+    data.constr_lb = [data.constr_lb; [-Inf for _ = 1:ncols]]
     data.constr_ub = [data.constr_ub; data.var_ub]
     data.var_ub .= Inf
 end
@@ -98,11 +98,11 @@ end
 function forward!(t::AddSlackVariables, data::ProblemData)
     nrows, ncols = size(data.constr_lhs)
     isequality = abs.(data.constr_ub .- data.constr_lb) .< 1e-6
-    eq = [i for i in 1:nrows if isequality[i]]
-    ge = [i for i in 1:nrows if isfinite(data.constr_lb[i]) && !isequality[i]]
-    le = [i for i in 1:nrows if isfinite(data.constr_ub[i]) && !isequality[i]]
+    eq = [i for i = 1:nrows if isequality[i]]
+    ge = [i for i = 1:nrows if isfinite(data.constr_lb[i]) && !isequality[i]]
+    le = [i for i = 1:nrows if isfinite(data.constr_ub[i]) && !isequality[i]]
     EQ, GE, LE = length(eq), length(ge), length(le)
-    
+
     t.M1 = [
         I spzeros(ncols, GE + LE)
         data.constr_lhs[ge, :] spzeros(GE, GE + LE)
@@ -128,8 +128,8 @@ function forward!(t::AddSlackVariables, data::ProblemData)
     data.obj = [data.obj; zeros(GE + LE)]
     data.var_lb = [data.var_lb; zeros(GE + LE)]
     data.var_ub = [data.var_ub; [Inf for _ = 1:(GE+LE)]]
-    data.var_names = [data.var_names; ["__s$i" for i in 1:(GE+LE)]]
-    data.var_types = [data.var_types; ['C' for _ in 1:(GE+LE)]]
+    data.var_names = [data.var_names; ["__s$i" for i = 1:(GE+LE)]]
+    data.var_types = [data.var_types; ['C' for _ = 1:(GE+LE)]]
     data.constr_lb = [
         data.constr_lb[eq]
         data.constr_lb[ge]
@@ -157,15 +157,15 @@ end
 Base.@kwdef mutable struct SplitFreeVars <: Transform
     F::Int = 0
     B::Int = 0
-    free::Vector{Int}=[]
-    others::Vector{Int}=[]
+    free::Vector{Int} = []
+    others::Vector{Int} = []
 end
 
 function forward!(t::SplitFreeVars, data::ProblemData)
     lhs = data.constr_lhs
     _, ncols = size(lhs)
-    free = [i for i in 1:ncols if !isfinite(data.var_lb[i]) && !isfinite(data.var_ub[i])]
-    others = [i for i in 1:ncols if isfinite(data.var_lb[i]) || isfinite(data.var_ub[i])]
+    free = [i for i = 1:ncols if !isfinite(data.var_lb[i]) && !isfinite(data.var_ub[i])]
+    others = [i for i = 1:ncols if isfinite(data.var_lb[i]) || isfinite(data.var_ub[i])]
     t.F = length(free)
     t.B = length(others)
     t.free, t.others = free, others
@@ -199,8 +199,8 @@ end
 
 function backwards!(t::SplitFreeVars, c::ConstraintSet)
     # Convert GE constraints into LE
-    nrows, _ =  size(c.lhs)
-    ge = [i for i in 1:nrows if isfinite(c.lb[i])]
+    nrows, _ = size(c.lhs)
+    ge = [i for i = 1:nrows if isfinite(c.lb[i])]
     c.ub[ge], c.lb[ge] = -c.lb[ge], -c.ub[ge]
     c.lhs[ge, :] *= -1
 
@@ -209,8 +209,8 @@ function backwards!(t::SplitFreeVars, c::ConstraintSet)
 
     # Take minimum (weakest) coefficient
     B, F = t.B, t.F
-    for i in 1:F
-        c.lhs[:, B + i] = min.(c.lhs[:, B + i], -c.lhs[:, B + F + i])
+    for i = 1:F
+        c.lhs[:, B+i] = min.(c.lhs[:, B+i], -c.lhs[:, B+F+i])
     end
     c.lhs = c.lhs[:, 1:(B+F)]
 end
@@ -231,7 +231,7 @@ end
 
 function forward!(t::FlipUnboundedBelowVars, data::ProblemData)
     _, ncols = size(data.constr_lhs)
-    for i in 1:ncols
+    for i = 1:ncols
         if isfinite(data.var_lb[i])
             continue
         end

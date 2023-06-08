@@ -6,12 +6,7 @@ import ..H5File
 
 using OrderedCollections
 
-function collect_gmi(
-    mps_filename;
-    optimizer,
-    max_rounds=10,
-    max_cuts_per_round=100,
-)
+function collect_gmi(mps_filename; optimizer, max_rounds = 10, max_cuts_per_round = 100)
     @info mps_filename
     reset_timer!()
 
@@ -24,7 +19,7 @@ function collect_gmi(
         zip(
             h5.get_array("static_var_names"),
             convert(Array{Float64}, h5.get_array("mip_var_values")),
-        )
+        ),
     )
 
     # Read optimal value
@@ -52,9 +47,9 @@ function collect_gmi(
     # Read problem
     model = read_from_file(mps_filename)
 
-    for round in 1:max_rounds
+    for round = 1:max_rounds
         @info "Round $(round)..."
-        
+
         stats_time_convert = @elapsed begin
             # Extract problem data
             data = ProblemData(model)
@@ -71,10 +66,10 @@ function collect_gmi(
             model_s = to_model(data_s)
             set_optimizer(model_s, optimizer)
             relax_integrality(model_s)
-    
+
             # Convert optimal solution to standard form
             sol_opt_s = forward(transforms, sol_opt)
-    
+
             # Assert converted solution is feasible for standard form problem
             @assert data_s.constr_lhs * sol_opt_s ≈ data_s.constr_lb
         end
@@ -93,26 +88,17 @@ function collect_gmi(
             return
         end
 
-         # Select tableau rows
+        # Select tableau rows
         basis = get_basis(model_s)
         sol_frac = get_x(model_s)
         stats_time_select += @elapsed begin
-            selected_rows = select_gmi_rows(
-                data_s,
-                basis,
-                sol_frac,
-                max_rows=max_cuts_per_round,
-            )
+            selected_rows =
+                select_gmi_rows(data_s, basis, sol_frac, max_rows = max_cuts_per_round)
         end
 
         # Compute selected tableau rows
         stats_time_tableau += @elapsed begin
-            tableau = compute_tableau(
-                data_s,
-                basis,
-                sol_frac,
-                rows=selected_rows,
-            )
+            tableau = compute_tableau(data_s, basis, sol_frac, rows = selected_rows)
 
             # Assert tableau rows have been computed correctly
             @assert tableau.lhs * sol_frac ≈ tableau.rhs
@@ -153,10 +139,7 @@ function collect_gmi(
         push!(stats_gap, gap(obj))
 
         # Store useful cuts; drop useless ones from the problem
-        useful = [
-            abs(shadow_price(c)) > 1e-3
-            for c in constrs
-        ]
+        useful = [abs(shadow_price(c)) > 1e-3 for c in constrs]
         drop = findall(useful .== false)
         keep = findall(useful .== true)
         delete.(model, constrs[drop])
