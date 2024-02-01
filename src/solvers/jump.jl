@@ -12,9 +12,12 @@ Base.@kwdef mutable struct _JumpModelExtData
     aot_cuts = nothing
     cb_data = nothing
     cuts = []
+    lazy = []
     where::Symbol = :WHERE_DEFAULT
     cuts_enforce::Union{Function,Nothing} = nothing
     cuts_separate::Union{Function,Nothing} = nothing
+    lazy_enforce::Union{Function,Nothing} = nothing
+    lazy_separate::Union{Function,Nothing} = nothing
 end
 
 function JuMP.copy_extension_data(
@@ -58,8 +61,10 @@ function submit(model::JuMP.Model, constr)
     ext = model.ext[:miplearn]
     if ext.where == :WHERE_CUTS
         MOI.submit(model, MOI.UserCut(ext.cb_data), constr)
+    elseif ext.where == :WHERE_LAZY
+        MOI.submit(model, MOI.LazyConstraint(ext.cb_data), constr)
     else
-        error("not implemented")
+        add_constraint(model, constr)
     end
 end
 
@@ -281,9 +286,10 @@ function _extract_after_mip(model::JuMP.Model, h5)
     slacks = abs.(lhs * x - rhs)
     h5.put_array("mip_constr_slacks", slacks)
 
-    # Cuts
+    # Cuts and lazy constraints
     ext = model.ext[:miplearn]
     h5.put_scalar("mip_cuts", JSON.json(ext.cuts))
+    h5.put_scalar("mip_lazy", JSON.json(ext.lazy))
 end
 
 function _fix_variables(model::JuMP.Model, var_names, var_values, stats)
@@ -316,6 +322,23 @@ function _optimize(model::JuMP.Model)
     end
     if ext.cuts_separate !== nothing
         set_attribute(model, MOI.UserCutCallback(), cut_callback)
+    end
+
+    # Set up lazy constraint callbacks
+    ext.lazy = []
+    function lazy_callback(cb_data)
+        ext.cb_data = cb_data
+        ext.where = :WHERE_LAZY
+        violations = ext.lazy_separate(cb_data)
+        for v in violations
+            push!(ext.lazy, v)
+        end
+        if !isempty(violations)
+            ext.lazy_enforce(violations)
+        end
+    end
+    if ext.lazy_separate !== nothing
+        set_attribute(model, MOI.LazyConstraintCallback(), lazy_callback)
     end
 
     # Optimize
@@ -363,12 +386,15 @@ function __init_solvers_jump__()
             inner;
             cuts_enforce::Union{Function,Nothing}=nothing,
             cuts_separate::Union{Function,Nothing}=nothing,
+            lazy_enforce::Union{Function,Nothing}=nothing,
+            lazy_separate::Union{Function,Nothing}=nothing,
         )
-            AbstractModel.__init__(self)
             self.inner = inner
             self.inner.ext[:miplearn] = _JumpModelExtData(
                 cuts_enforce=cuts_enforce,
                 cuts_separate=cuts_separate,
+                lazy_enforce=lazy_enforce,
+                lazy_separate=lazy_separate,
             )
         end
 
@@ -408,6 +434,10 @@ function __init_solvers_jump__()
 
         function set_cuts(self, cuts)
             self.inner.ext[:miplearn].aot_cuts = cuts
+        end
+
+        function lazy_enforce(self, model, violations)
+            self.inner.ext[:miplearn].lazy_enforce(violations)
         end
     end
     copy!(JumpModel, Class)

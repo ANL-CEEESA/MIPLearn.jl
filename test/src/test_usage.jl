@@ -13,22 +13,22 @@ function test_usage()
 
     @debug "Setting up LearningSolver..."
     solver = LearningSolver(
-        components = [
+        components=[
             IndependentVarsPrimalComponent(
-                base_clf = SingleClassFix(
+                base_clf=SingleClassFix(
                     MinProbabilityClassifier(
-                        base_clf = LogisticRegression(),
-                        thresholds = [0.95, 0.95],
+                        base_clf=LogisticRegression(),
+                        thresholds=[0.95, 0.95],
                     ),
                 ),
-                extractor = AlvLouWeh2017Extractor(),
-                action = SetWarmStart(),
+                extractor=AlvLouWeh2017Extractor(),
+                action=SetWarmStart(),
             ),
         ],
     )
 
     @debug "Collecting training data..."
-    bc = BasicCollector()
+    bc = BasicCollector(write_mps=false)
     bc.collect(data_filenames, build_setcover_model_jump)
 
     @debug "Training models..."
