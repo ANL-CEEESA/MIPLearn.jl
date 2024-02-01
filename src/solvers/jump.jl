@@ -17,6 +17,15 @@ Base.@kwdef mutable struct _JumpModelExtData
     cuts_separate::Union{Function,Nothing} = nothing
 end
 
+function JuMP.copy_extension_data(
+    ::_JumpModelExtData,
+    new_model::AbstractModel,
+    ::AbstractModel,
+)
+    # Do not transfer any extension data to the new model
+    new_model.ext[:miplearn] = _JumpModelExtData()
+end
+
 # -----------------------------------------------------------------------------
 
 function _add_constrs(

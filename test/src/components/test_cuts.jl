@@ -28,15 +28,13 @@ end
 
 function test_cuts()
     data_filenames = ["$BASEDIR/../fixtures/stab-n50-0000$i.pkl.gz" for i in 0:0]
-    clf = pyimport("sklearn.neighbors").KNeighborsClassifier(n_neighbors=1)
+    clf = pyimport("sklearn.dummy").DummyClassifier()
     extractor = H5FieldsExtractor(
         instance_fields=["static_var_obj_coeffs"],
     )
     comp = MemorizingCutsComponent(clf=clf, extractor=extractor)
     solver = LearningSolver(components=[comp])
     solver.fit(data_filenames)
-    @show comp.n_features_
-    @show comp.n_targets_
     stats = solver.optimize(
         data_filenames[1],
         data -> build_stab_model_jump(data, optimizer=SCIP.Optimizer),

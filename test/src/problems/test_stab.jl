@@ -6,11 +6,6 @@ using PyCall
 using SCIP
 
 function test_problems_stab()
-    test_problems_stab_1()
-    test_problems_stab_2()
-end
-
-function test_problems_stab_1()
     nx = pyimport("networkx")
     data = MaxWeightStableSetData(
         graph=nx.gnp_random_graph(25, 0.5, seed=42),
