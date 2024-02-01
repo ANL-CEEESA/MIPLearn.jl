@@ -51,7 +51,7 @@ function test_problems_setcover_model()
     )
 
     h5 = H5File(tempname(), "w")
-    model = build_setcover_model(data)
+    model = build_setcover_model_jump(data)
     model.extract_after_load(h5)
     model.optimize()
     model.extract_after_mip(h5)

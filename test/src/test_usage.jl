@@ -29,13 +29,13 @@ function test_usage()
 
     @debug "Collecting training data..."
     bc = BasicCollector()
-    bc.collect(data_filenames, build_setcover_model)
+    bc.collect(data_filenames, build_setcover_model_jump)
 
     @debug "Training models..."
     solver.fit(data_filenames)
 
     @debug "Solving model..."
-    solver.optimize(data_filenames[1], build_setcover_model)
+    solver.optimize(data_filenames[1], build_setcover_model_jump)
 
     @debug "Checking solution..."
     h5 = H5File(h5_filenames[1])

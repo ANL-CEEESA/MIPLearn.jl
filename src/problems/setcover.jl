@@ -13,12 +13,11 @@ function __init_problems_setcover__()
     copy!(SetCoverGenerator, pyimport("miplearn.problems.setcover").SetCoverGenerator)
 end
 
-function build_setcover_model(data::Any; optimizer = HiGHS.Optimizer)
+function build_setcover_model_jump(data::Any; optimizer = HiGHS.Optimizer)
     if data isa String
         data = read_pkl_gz(data)
     end
     model = Model(optimizer)
-    set_silent(model)
     n_elements, n_sets = size(data.incidence_matrix)
     E = 0:n_elements-1
     S = 0:n_sets-1
@@ -32,4 +31,4 @@ function build_setcover_model(data::Any; optimizer = HiGHS.Optimizer)
     return JumpModel(model)
 end
 
-export SetCoverData, SetCoverGenerator, build_setcover_model
+export SetCoverData, SetCoverGenerator, build_setcover_model_jump

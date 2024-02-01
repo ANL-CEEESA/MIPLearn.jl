@@ -14,5 +14,5 @@ function fixture_setcover_data()
 end
 
 function fixture_setcover_model()
-    return build_setcover_model(fixture_setcover_data())
+    return build_setcover_model_jump(fixture_setcover_data())
 end

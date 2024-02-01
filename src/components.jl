@@ -2,19 +2,21 @@
 #  Copyright (C) 2020-2023, UChicago Argonne, LLC. All rights reserved.
 #  Released under the modified BSD license. See COPYING.md for more details.
 
-global MinProbabilityClassifier = PyNULL()
-global SingleClassFix = PyNULL()
-global PrimalComponentAction = PyNULL()
-global SetWarmStart = PyNULL()
-global FixVariables = PyNULL()
 global EnforceProximity = PyNULL()
 global ExpertPrimalComponent = PyNULL()
+global FixVariables = PyNULL()
 global IndependentVarsPrimalComponent = PyNULL()
 global JointVarsPrimalComponent = PyNULL()
-global SolutionConstructor = PyNULL()
+global MemorizingCutsComponent = PyNULL()
+global MemorizingLazyComponent = PyNULL()
 global MemorizingPrimalComponent = PyNULL()
-global SelectTopSolutions = PyNULL()
 global MergeTopSolutions = PyNULL()
+global MinProbabilityClassifier = PyNULL()
+global PrimalComponentAction = PyNULL()
+global SelectTopSolutions = PyNULL()
+global SetWarmStart = PyNULL()
+global SingleClassFix = PyNULL()
+global SolutionConstructor = PyNULL()
 
 function __init_components__()
     copy!(
@@ -51,6 +53,8 @@ function __init_components__()
     )
     copy!(SelectTopSolutions, pyimport("miplearn.components.primal.mem").SelectTopSolutions)
     copy!(MergeTopSolutions, pyimport("miplearn.components.primal.mem").MergeTopSolutions)
+    copy!(MemorizingCutsComponent, pyimport("miplearn.components.cuts.mem").MemorizingCutsComponent)
+    copy!(MemorizingLazyComponent, pyimport("miplearn.components.lazy.mem").MemorizingLazyComponent)
 end
 
 export MinProbabilityClassifier,
@@ -65,4 +69,6 @@ export MinProbabilityClassifier,
     SolutionConstructor,
     MemorizingPrimalComponent,
     SelectTopSolutions,
-    MergeTopSolutions
+    MergeTopSolutions,
+    MemorizingCutsComponent,
+    MemorizingLazyComponent

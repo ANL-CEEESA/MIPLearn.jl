@@ -4,8 +4,18 @@
 
 using JuMP
 using HiGHS
+using JSON
 
 global JumpModel = PyNULL()
+
+Base.@kwdef mutable struct _JumpModelExtData
+    aot_cuts = nothing
+    cb_data = nothing
+    cuts = []
+    where::Symbol = :WHERE_DEFAULT
+    cuts_enforce::Union{Function,Nothing} = nothing
+    cuts_separate::Union{Function,Nothing} = nothing
+end
 
 # -----------------------------------------------------------------------------
 
@@ -32,6 +42,15 @@ function _add_constrs(
         else
             error("Unknown sense: $sense")
         end
+    end
+end
+
+function submit(model::JuMP.Model, constr)
+    ext = model.ext[:miplearn]
+    if ext.where == :WHERE_CUTS
+        MOI.submit(model, MOI.UserCut(ext.cb_data), constr)
+    else
+        error("not implemented")
     end
 end
 
@@ -108,6 +127,9 @@ function _extract_after_load_constrs(model::JuMP.Model, h5)
                 error("Unsupported constraint type: ($ftype, $stype)")
             end
         end
+    end
+    if isempty(names)
+        error("no model constraints found; note that MIPLearn ignores unnamed constraints")
     end
     lhs = sparse(lhs_rows, lhs_cols, lhs_values, length(rhs), JuMP.num_variables(model))
     h5.put_sparse("static_constr_lhs", lhs)
@@ -249,17 +271,50 @@ function _extract_after_mip(model::JuMP.Model, h5)
     rhs = h5.get_array("static_constr_rhs")
     slacks = abs.(lhs * x - rhs)
     h5.put_array("mip_constr_slacks", slacks)
+
+    # Cuts
+    ext = model.ext[:miplearn]
+    h5.put_scalar("mip_cuts", JSON.json(ext.cuts))
 end
 
 function _fix_variables(model::JuMP.Model, var_names, var_values, stats)
     vars = [variable_by_name(model, v) for v in var_names]
     for (i, var) in enumerate(vars)
-        fix(var, var_values[i], force = true)
+        fix(var, var_values[i], force=true)
     end
 end
 
 function _optimize(model::JuMP.Model)
+    # Set up cut callbacks
+    ext = model.ext[:miplearn]
+    ext.cuts = []
+    function cut_callback(cb_data)
+        ext.cb_data = cb_data
+        ext.where = :WHERE_CUTS
+        if ext.aot_cuts !== nothing
+            @info "Enforcing $(length(ext.aot_cuts)) cuts ahead-of-time..."
+            violations = ext.aot_cuts
+            ext.aot_cuts = nothing
+        else
+            violations = ext.cuts_separate(cb_data)
+            for v in violations
+                push!(ext.cuts, v)
+            end
+        end
+        if !isempty(violations)
+            ext.cuts_enforce(violations)
+        end
+    end
+    if ext.cuts_separate !== nothing
+        set_attribute(model, MOI.UserCutCallback(), cut_callback)
+    end
+
+    # Optimize
+    ext.where = :WHERE_DEFAULT
     optimize!(model)
+
+    # Cleanup
+    ext.cb_data = nothing
     flush(stdout)
     Libc.flush_cstdio()
 end
@@ -291,10 +346,21 @@ end
 # -----------------------------------------------------------------------------
 
 function __init_solvers_jump__()
-    @pydef mutable struct Class
+    AbstractModel = pyimport("miplearn.solvers.abstract").AbstractModel
+    @pydef mutable struct Class <: AbstractModel
 
-        function __init__(self, inner)
+        function __init__(
+            self,
+            inner;
+            cuts_enforce::Union{Function,Nothing}=nothing,
+            cuts_separate::Union{Function,Nothing}=nothing,
+        )
+            AbstractModel.__init__(self)
             self.inner = inner
+            self.inner.ext[:miplearn] = _JumpModelExtData(
+                cuts_enforce=cuts_enforce,
+                cuts_separate=cuts_separate,
+            )
         end
 
         add_constrs(
@@ -303,7 +369,7 @@ function __init_solvers_jump__()
             constrs_lhs,
             constrs_sense,
             constrs_rhs,
-            stats = nothing,
+            stats=nothing,
         ) = _add_constrs(
             self.inner,
             from_str_array(var_names),
@@ -319,17 +385,21 @@ function __init_solvers_jump__()
 
         extract_after_mip(self, h5) = _extract_after_mip(self.inner, h5)
 
-        fix_variables(self, var_names, var_values, stats = nothing) =
+        fix_variables(self, var_names, var_values, stats=nothing) =
             _fix_variables(self.inner, from_str_array(var_names), var_values, stats)
 
         optimize(self) = _optimize(self.inner)
 
         relax(self) = Class(_relax(self.inner))
 
-        set_warm_starts(self, var_names, var_values, stats = nothing) =
+        set_warm_starts(self, var_names, var_values, stats=nothing) =
             _set_warm_starts(self.inner, from_str_array(var_names), var_values, stats)
 
         write(self, filename) = _write(self.inner, filename)
+
+        function set_cuts(self, cuts)
+            self.inner.ext[:miplearn].aot_cuts = cuts
+        end
     end
     copy!(JumpModel, Class)
 end
