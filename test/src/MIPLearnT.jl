@@ -38,6 +38,7 @@ function runtests()
         test_solvers_jump()
         test_usage()
         test_cuts()
+        test_lazy()
     end
 end
 
