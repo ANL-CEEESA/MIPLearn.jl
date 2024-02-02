@@ -372,6 +372,13 @@ function _set_warm_starts(model::JuMP.Model, var_names, var_values, stats)
 end
 
 function _write(model::JuMP.Model, filename)
+    ext = model.ext[:miplearn]
+    if ext.lazy_separate !== nothing
+        set_attribute(model, MOI.LazyConstraintCallback(), nothing)
+    end
+    if ext.cuts_separate !== nothing
+        set_attribute(model, MOI.UserCutCallback(), nothing)
+    end
     write_to_file(model, filename)
 end
 
@@ -438,6 +445,13 @@ function __init_solvers_jump__()
 
         function lazy_enforce(self, model, violations)
             self.inner.ext[:miplearn].lazy_enforce(violations)
+        end
+
+        function _lazy_enforce_collected(self)
+            ext = self.inner.ext[:miplearn]
+            if ext.lazy_enforce !== nothing
+                ext.lazy_enforce(ext.lazy)
+            end
         end
     end
     copy!(JumpModel, Class)

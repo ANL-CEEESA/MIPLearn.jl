@@ -28,7 +28,7 @@ function test_usage()
     )
 
     @debug "Collecting training data..."
-    bc = BasicCollector(write_mps=false)
+    bc = BasicCollector()
     bc.collect(data_filenames, build_setcover_model_jump)
 
     @debug "Training models..."

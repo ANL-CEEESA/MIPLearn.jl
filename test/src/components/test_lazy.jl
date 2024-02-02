@@ -20,7 +20,7 @@ function gen_tsp()
     )
     data = gen.generate(1)
     data_filenames = write_pkl_gz(data, "$BASEDIR/../fixtures", prefix="tsp-n20-")
-    collector = BasicCollector(write_mps=false)
+    collector = BasicCollector()
     collector.collect(
         data_filenames,
         data -> build_tsp_model_jump(data, optimizer=GLPK.Optimizer),

@@ -17,7 +17,7 @@ function gen_stab()
     )
     data = gen.generate(1)
     data_filenames = write_pkl_gz(data, "$BASEDIR/../fixtures", prefix="stab-n50-")
-    collector = BasicCollector(write_mps=false)
+    collector = BasicCollector()
     collector.collect(
         data_filenames,
         data -> build_stab_model_jump(data, optimizer=SCIP.Optimizer),
