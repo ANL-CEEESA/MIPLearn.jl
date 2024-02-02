@@ -13,7 +13,7 @@ function __init_problems_setcover__()
     copy!(SetCoverGenerator, pyimport("miplearn.problems.setcover").SetCoverGenerator)
 end
 
-function build_setcover_model_jump(data::Any; optimizer = HiGHS.Optimizer)
+function build_setcover_model_jump(data::Any; optimizer=HiGHS.Optimizer)
     if data isa String
         data = read_pkl_gz(data)
     end

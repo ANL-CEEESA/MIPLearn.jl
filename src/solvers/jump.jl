@@ -18,15 +18,17 @@ Base.@kwdef mutable struct _JumpModelExtData
     cuts_separate::Union{Function,Nothing} = nothing
     lazy_enforce::Union{Function,Nothing} = nothing
     lazy_separate::Union{Function,Nothing} = nothing
+    lp_optimizer
 end
 
 function JuMP.copy_extension_data(
-    ::_JumpModelExtData,
+    old_ext::_JumpModelExtData,
     new_model::AbstractModel,
     ::AbstractModel,
 )
-    # Do not transfer any extension data to the new model
-    new_model.ext[:miplearn] = _JumpModelExtData()
+    new_model.ext[:miplearn] = _JumpModelExtData(
+        lp_optimizer=old_ext.lp_optimizer
+    )
 end
 
 # -----------------------------------------------------------------------------
@@ -354,8 +356,7 @@ end
 function _relax(model::JuMP.Model)
     relaxed, _ = copy_model(model)
     relax_integrality(relaxed)
-    # FIXME: Remove hardcoded optimizer
-    set_optimizer(relaxed, HiGHS.Optimizer)
+    set_optimizer(relaxed, model.ext[:miplearn].lp_optimizer)
     set_silent(relaxed)
     return relaxed
 end
@@ -395,6 +396,7 @@ function __init_solvers_jump__()
             cuts_separate::Union{Function,Nothing}=nothing,
             lazy_enforce::Union{Function,Nothing}=nothing,
             lazy_separate::Union{Function,Nothing}=nothing,
+            lp_optimizer=HiGHS.Optimizer,
         )
             self.inner = inner
             self.inner.ext[:miplearn] = _JumpModelExtData(
@@ -402,6 +404,7 @@ function __init_solvers_jump__()
                 cuts_separate=cuts_separate,
                 lazy_enforce=lazy_enforce,
                 lazy_separate=lazy_separate,
+                lp_optimizer=lp_optimizer,
             )
         end
 

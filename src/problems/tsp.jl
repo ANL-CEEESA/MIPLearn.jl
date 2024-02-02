@@ -12,7 +12,7 @@ function __init_problems_tsp__()
     copy!(TravelingSalesmanGenerator, pyimport("miplearn.problems.tsp").TravelingSalesmanGenerator)
 end
 
-function build_tsp_model_jump(data::Any; optimizer=HiGHS.Optimizer)
+function build_tsp_model_jump(data::Any; optimizer)
     nx = pyimport("networkx")
 
     if data isa String
@@ -65,6 +65,7 @@ function build_tsp_model_jump(data::Any; optimizer=HiGHS.Optimizer)
         model,
         lazy_enforce=lazy_enforce,
         lazy_separate=lazy_separate,
+        lp_optimizer=optimizer,
     )
 end
 
