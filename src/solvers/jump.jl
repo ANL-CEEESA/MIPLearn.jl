@@ -344,10 +344,10 @@ function _optimize(model::JuMP.Model)
     end
 
     # Optimize
-    ext.where = :WHERE_DEFAULT
     optimize!(model)
 
     # Cleanup
+    ext.where = :WHERE_DEFAULT
     ext.cb_data = nothing
     flush(stdout)
     Libc.flush_cstdio()
@@ -446,13 +446,13 @@ function __init_solvers_jump__()
             self.inner.ext[:miplearn].aot_cuts = cuts
         end
 
-        function lazy_enforce(self, model, violations)
+        function lazy_enforce(self, violations)
             self.inner.ext[:miplearn].lazy_enforce(violations)
         end
 
         function _lazy_enforce_collected(self)
             ext = self.inner.ext[:miplearn]
-            if ext.lazy_enforce !== nothing
+            if ext.lazy !== nothing
                 ext.lazy_enforce(ext.lazy)
             end
         end
