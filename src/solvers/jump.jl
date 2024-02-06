@@ -452,7 +452,7 @@ function __init_solvers_jump__()
 
         function _lazy_enforce_collected(self)
             ext = self.inner.ext[:miplearn]
-            if ext.lazy !== nothing
+            if ext.lazy_enforce !== nothing
                 ext.lazy_enforce(ext.lazy)
             end
         end
