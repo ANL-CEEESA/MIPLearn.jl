@@ -5,8 +5,10 @@
 import ..H5File
 
 using OrderedCollections
+using Statistics
 
-function collect_gmi(mps_filename; optimizer, max_rounds = 10, max_cuts_per_round = 100)
+
+function collect_gmi(mps_filename; optimizer, max_rounds=10, max_cuts_per_round=100, atol=1e-4)
     @info mps_filename
     reset_timer!()
 
@@ -27,7 +29,7 @@ function collect_gmi(mps_filename; optimizer, max_rounds = 10, max_cuts_per_roun
     if obj_mip === nothing
         obj_mip = h5.get_scalar("mip_obj_value")
     end
-    obj_lp = nothing
+    obj_lp = h5.get_scalar("lp_obj_value")
     h5.file.close()
 
     # Define relative MIP gap
@@ -58,8 +60,8 @@ function collect_gmi(mps_filename; optimizer, max_rounds = 10, max_cuts_per_roun
             sol_opt = [sol_opt_dict[n] for n in data.var_names]
 
             # Assert optimal solution is feasible for the original problem
-            @assert all(data.constr_lb .- 1e-3 .<= data.constr_lhs * sol_opt)
-            @assert all(data.constr_lhs * sol_opt .<= data.constr_ub .+ 1e-3)
+            assert_leq(data.constr_lb, data.constr_lhs * sol_opt)
+            assert_leq(data.constr_lhs * sol_opt, data.constr_ub)
 
             # Convert to standard form
             data_s, transforms = convert_to_standard_form(data)
@@ -71,15 +73,17 @@ function collect_gmi(mps_filename; optimizer, max_rounds = 10, max_cuts_per_roun
             sol_opt_s = forward(transforms, sol_opt)
 
             # Assert converted solution is feasible for standard form problem
-            @assert data_s.constr_lhs * sol_opt_s ≈ data_s.constr_lb
+            assert_eq(data_s.constr_lhs * sol_opt_s, data_s.constr_lb)
         end
 
         # Optimize standard form
         optimize!(model_s)
         stats_time_solve += solve_time(model_s)
         obj = objective_value(model_s) + data_s.obj_offset
-        if obj_lp === nothing
-            obj_lp = obj
+
+        if round == 1
+            # Assert standard form problem has same value as original
+            assert_eq(obj, obj_lp)
             push!(stats_obj, obj)
             push!(stats_gap, gap(obj))
             push!(stats_ncuts, 0)
@@ -93,16 +97,16 @@ function collect_gmi(mps_filename; optimizer, max_rounds = 10, max_cuts_per_roun
         sol_frac = get_x(model_s)
         stats_time_select += @elapsed begin
             selected_rows =
-                select_gmi_rows(data_s, basis, sol_frac, max_rows = max_cuts_per_round)
+                select_gmi_rows(data_s, basis, sol_frac, max_rows=max_cuts_per_round)
         end
 
         # Compute selected tableau rows
         stats_time_tableau += @elapsed begin
-            tableau = compute_tableau(data_s, basis, sol_frac, rows = selected_rows)
+            tableau = compute_tableau(data_s, basis, sol_frac, rows=selected_rows)
 
             # Assert tableau rows have been computed correctly
-            @assert tableau.lhs * sol_frac ≈ tableau.rhs
-            @assert tableau.lhs * sol_opt_s ≈ tableau.rhs
+            assert_eq(tableau.lhs * sol_frac, tableau.rhs)
+            assert_eq(tableau.lhs * sol_opt_s, tableau.rhs)
         end
 
         # Compute GMI cuts
@@ -110,17 +114,12 @@ function collect_gmi(mps_filename; optimizer, max_rounds = 10, max_cuts_per_roun
             cuts_s = compute_gmi(data_s, tableau)
 
             # Assert cuts have been generated correctly
-            try
-                assert_cuts_off(cuts_s, sol_frac)
-                assert_does_not_cut_off(cuts_s, sol_opt_s)
-            catch
-                @warn "Invalid cuts detected. Discarding round $round cuts and aborting."
-                break
-            end
+            assert_cuts_off(cuts_s, sol_frac)
+            assert_does_not_cut_off(cuts_s, sol_opt_s)
 
             # Abort if no cuts are left
             if length(cuts_s.lb) == 0
-                @info "No cuts generated. Aborting."
+                @info "No cuts generated. Stopping."
                 break
             end
         end
@@ -139,7 +138,7 @@ function collect_gmi(mps_filename; optimizer, max_rounds = 10, max_cuts_per_roun
         push!(stats_gap, gap(obj))
 
         # Store useful cuts; drop useless ones from the problem
-        useful = [abs(shadow_price(c)) > 1e-3 for c in constrs]
+        useful = [abs(shadow_price(c)) > atol for c in constrs]
         drop = findall(useful .== false)
         keep = findall(useful .== true)
         delete.(model, constrs[drop])
@@ -174,7 +173,6 @@ function collect_gmi(mps_filename; optimizer, max_rounds = 10, max_cuts_per_roun
         "time_tableau" => stats_time_tableau,
         "time_gmi" => stats_time_gmi,
         "obj_mip" => obj_mip,
-        "obj_lp" => obj_lp,
         "stats_obj" => stats_obj,
         "stats_gap" => stats_gap,
         "stats_ncuts" => stats_ncuts,
