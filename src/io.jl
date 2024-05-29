@@ -39,14 +39,14 @@ end
 function PyObject(m::SparseMatrixCSC)
     pyimport("scipy.sparse").csc_matrix(
         (m.nzval, m.rowval .- 1, m.colptr .- 1),
-        shape=size(m),
+        shape = size(m),
     ).tocoo()
 end
 
 function write_jld2(
     objs::Vector,
     dirname::AbstractString;
-    prefix::AbstractString=""
+    prefix::AbstractString = "",
 )::Vector{String}
     mkpath(dirname)
     filenames = [@sprintf("%s/%s%05d.jld2", dirname, prefix, i) for i = 1:length(objs)]

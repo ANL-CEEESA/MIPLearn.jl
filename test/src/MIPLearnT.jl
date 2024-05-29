@@ -43,8 +43,8 @@ function runtests()
 end
 
 function format()
-    JuliaFormatter.format(BASEDIR, verbose=true)
-    JuliaFormatter.format("$BASEDIR/../../src", verbose=true)
+    JuliaFormatter.format(BASEDIR, verbose = true)
+    JuliaFormatter.format("$BASEDIR/../../src", verbose = true)
     return
 end
 

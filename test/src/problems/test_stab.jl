@@ -8,11 +8,11 @@ using SCIP
 function test_problems_stab()
     nx = pyimport("networkx")
     data = MaxWeightStableSetData(
-        graph=nx.gnp_random_graph(25, 0.5, seed=42),
-        weights=repeat([1.0], 25),
+        graph = nx.gnp_random_graph(25, 0.5, seed = 42),
+        weights = repeat([1.0], 25),
     )
     h5 = H5File(tempname(), "w")
-    model = build_stab_model_jump(data, optimizer=SCIP.Optimizer)
+    model = build_stab_model_jump(data, optimizer = SCIP.Optimizer)
     model.extract_after_load(h5)
     model.optimize()
     model.extract_after_mip(h5)

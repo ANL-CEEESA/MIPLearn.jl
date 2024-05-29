@@ -9,7 +9,13 @@ using SparseArrays
 using Statistics
 using TimerOutputs
 
-function collect_gmi(mps_filename; optimizer, max_rounds=10, max_cuts_per_round=100, atol=1e-4)
+function collect_gmi(
+    mps_filename;
+    optimizer,
+    max_rounds = 10,
+    max_cuts_per_round = 100,
+    atol = 1e-4,
+)
     @info mps_filename
     reset_timer!()
 
@@ -98,12 +104,12 @@ function collect_gmi(mps_filename; optimizer, max_rounds=10, max_cuts_per_round=
         sol_frac = get_x(model_s)
         stats_time_select += @elapsed begin
             selected_rows =
-                select_gmi_rows(data_s, basis, sol_frac, max_rows=max_cuts_per_round)
+                select_gmi_rows(data_s, basis, sol_frac, max_rows = max_cuts_per_round)
         end
 
         # Compute selected tableau rows
         stats_time_tableau += @elapsed begin
-            tableau = compute_tableau(data_s, basis, sol_frac, rows=selected_rows)
+            tableau = compute_tableau(data_s, basis, sol_frac, rows = selected_rows)
 
             # Assert tableau rows have been computed correctly
             assert_eq(tableau.lhs * sol_frac, tableau.rhs)
@@ -180,10 +186,9 @@ function collect_gmi(mps_filename; optimizer, max_rounds=10, max_cuts_per_round=
     )
 end
 
-function select_gmi_rows(data, basis, x; max_rows=10, atol=1e-4)
+function select_gmi_rows(data, basis, x; max_rows = 10, atol = 1e-4)
     candidate_rows = [
-        r for
-        r in 1:length(basis.var_basic) if (
+        r for r = 1:length(basis.var_basic) if (
             (data.var_types[basis.var_basic[r]] != 'C') &&
             (frac(x[basis.var_basic[r]]) > atol) &&
             (frac2(x[basis.var_basic[r]]) > atol)
@@ -204,7 +209,7 @@ function compute_gmi(data::ProblemData, tableau::Tableau)::ConstraintSet
     lhs_J = Int[]
     lhs_V = Float64[]
     @timeit "Compute coefficients" begin
-        for k in 1:nnz(tableau.lhs)
+        for k = 1:nnz(tableau.lhs)
             i::Int = tableau_I[k]
             j::Int = tableau_J[k]
             v::Float64 = 0.0
@@ -235,4 +240,5 @@ function compute_gmi(data::ProblemData, tableau::Tableau)::ConstraintSet
     return ConstraintSet(; lhs, ub, lb)
 end
 
-export compute_gmi, frac, select_gmi_rows, assert_cuts_off, assert_does_not_cut_off, collect_gmi
+export compute_gmi,
+    frac, select_gmi_rows, assert_cuts_off, assert_does_not_cut_off, collect_gmi

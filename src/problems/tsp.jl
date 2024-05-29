@@ -9,7 +9,10 @@ global TravelingSalesmanGenerator = PyNULL()
 
 function __init_problems_tsp__()
     copy!(TravelingSalesmanData, pyimport("miplearn.problems.tsp").TravelingSalesmanData)
-    copy!(TravelingSalesmanGenerator, pyimport("miplearn.problems.tsp").TravelingSalesmanGenerator)
+    copy!(
+        TravelingSalesmanGenerator,
+        pyimport("miplearn.problems.tsp").TravelingSalesmanGenerator,
+    )
 end
 
 function build_tsp_model_jump(data::Any; optimizer)
@@ -19,17 +22,15 @@ function build_tsp_model_jump(data::Any; optimizer)
         data = read_pkl_gz(data)
     end
     model = Model(optimizer)
-    edges = [(i, j) for i in 1:data.n_cities for j in (i+1):data.n_cities]
+    edges = [(i, j) for i = 1:data.n_cities for j = (i+1):data.n_cities]
     x = @variable(model, x[edges], Bin)
-    @objective(model, Min, sum(
-        x[(i, j)] * data.distances[i, j] for (i, j) in edges
-    ))
+    @objective(model, Min, sum(x[(i, j)] * data.distances[i, j] for (i, j) in edges))
 
     # Eq: Must choose two edges adjacent to each node
     @constraint(
         model,
         eq_degree[i in 1:data.n_cities],
-        sum(x[(min(i, j), max(i, j))] for j in 1:data.n_cities if i != j) == 2
+        sum(x[(min(i, j), max(i, j))] for j = 1:data.n_cities if i != j) == 2
     )
 
     function lazy_separate(cb_data)
@@ -41,10 +42,8 @@ function build_tsp_model_jump(data::Any; optimizer)
         for component in nx.connected_components(graph)
             if length(component) < data.n_cities
                 cut_edges = [
-                    [e[1], e[2]]
-                    for e in edges
-                    if (e[1] ∈ component && e[2] ∉ component)
-                    ||
+                    [e[1], e[2]] for
+                    e in edges if (e[1] ∈ component && e[2] ∉ component) ||
                     (e[1] ∉ component && e[2] ∈ component)
                 ]
                 push!(violations, cut_edges)
@@ -63,9 +62,9 @@ function build_tsp_model_jump(data::Any; optimizer)
 
     return JumpModel(
         model,
-        lazy_enforce=lazy_enforce,
-        lazy_separate=lazy_separate,
-        lp_optimizer=optimizer,
+        lazy_enforce = lazy_enforce,
+        lazy_separate = lazy_separate,
+        lp_optimizer = optimizer,
     )
 end
 

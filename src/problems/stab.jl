@@ -10,10 +10,13 @@ global MaxWeightStableSetGenerator = PyNULL()
 
 function __init_problems_stab__()
     copy!(MaxWeightStableSetData, pyimport("miplearn.problems.stab").MaxWeightStableSetData)
-    copy!(MaxWeightStableSetGenerator, pyimport("miplearn.problems.stab").MaxWeightStableSetGenerator)
+    copy!(
+        MaxWeightStableSetGenerator,
+        pyimport("miplearn.problems.stab").MaxWeightStableSetGenerator,
+    )
 end
 
-function build_stab_model_jump(data::Any; optimizer=HiGHS.Optimizer)
+function build_stab_model_jump(data::Any; optimizer = HiGHS.Optimizer)
     nx = pyimport("networkx")
 
     if data isa String
@@ -50,11 +53,7 @@ function build_stab_model_jump(data::Any; optimizer=HiGHS.Optimizer)
         end
     end
 
-    return JumpModel(
-        model,
-        cuts_separate=cuts_separate,
-        cuts_enforce=cuts_enforce,
-    )
+    return JumpModel(model, cuts_separate = cuts_separate, cuts_enforce = cuts_enforce)
 end
 
 export MaxWeightStableSetData, MaxWeightStableSetGenerator, build_stab_model_jump

@@ -46,7 +46,7 @@ function test_jld2()
         _TestStruct(2, [1.0, 2.0, 3.0]),
         _TestStruct(3, [3.0, 3.0, 3.0]),
     ]
-    filenames = write_jld2(data, dirname, prefix="obj")
+    filenames = write_jld2(data, dirname, prefix = "obj")
     @test all(
         filenames .==
         ["$dirname/obj00001.jld2", "$dirname/obj00002.jld2", "$dirname/obj00003.jld2"],

@@ -53,8 +53,14 @@ function __init_components__()
     )
     copy!(SelectTopSolutions, pyimport("miplearn.components.primal.mem").SelectTopSolutions)
     copy!(MergeTopSolutions, pyimport("miplearn.components.primal.mem").MergeTopSolutions)
-    copy!(MemorizingCutsComponent, pyimport("miplearn.components.cuts.mem").MemorizingCutsComponent)
-    copy!(MemorizingLazyComponent, pyimport("miplearn.components.lazy.mem").MemorizingLazyComponent)
+    copy!(
+        MemorizingCutsComponent,
+        pyimport("miplearn.components.cuts.mem").MemorizingCutsComponent,
+    )
+    copy!(
+        MemorizingLazyComponent,
+        pyimport("miplearn.components.lazy.mem").MemorizingLazyComponent,
+    )
 end
 
 export MinProbabilityClassifier,

@@ -13,16 +13,16 @@ function test_usage()
 
     @debug "Setting up LearningSolver..."
     solver = LearningSolver(
-        components=[
+        components = [
             IndependentVarsPrimalComponent(
-                base_clf=SingleClassFix(
+                base_clf = SingleClassFix(
                     MinProbabilityClassifier(
-                        base_clf=LogisticRegression(),
-                        thresholds=[0.95, 0.95],
+                        base_clf = LogisticRegression(),
+                        thresholds = [0.95, 0.95],
                     ),
                 ),
-                extractor=AlvLouWeh2017Extractor(),
-                action=SetWarmStart(),
+                extractor = AlvLouWeh2017Extractor(),
+                action = SetWarmStart(),
             ),
         ],
     )

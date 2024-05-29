@@ -18,7 +18,7 @@ Base.@kwdef mutable struct _JumpModelExtData
     cuts_separate::Union{Function,Nothing} = nothing
     lazy_enforce::Union{Function,Nothing} = nothing
     lazy_separate::Union{Function,Nothing} = nothing
-    lp_optimizer
+    lp_optimizer::Any
 end
 
 function JuMP.copy_extension_data(
@@ -26,9 +26,7 @@ function JuMP.copy_extension_data(
     new_model::AbstractModel,
     ::AbstractModel,
 )
-    new_model.ext[:miplearn] = _JumpModelExtData(
-        lp_optimizer=old_ext.lp_optimizer
-    )
+    new_model.ext[:miplearn] = _JumpModelExtData(lp_optimizer = old_ext.lp_optimizer)
 end
 
 # -----------------------------------------------------------------------------
@@ -297,7 +295,7 @@ end
 function _fix_variables(model::JuMP.Model, var_names, var_values, stats)
     vars = [variable_by_name(model, v) for v in var_names]
     for (i, var) in enumerate(vars)
-        fix(var, var_values[i], force=true)
+        fix(var, var_values[i], force = true)
     end
 end
 
@@ -392,19 +390,19 @@ function __init_solvers_jump__()
         function __init__(
             self,
             inner;
-            cuts_enforce::Union{Function,Nothing}=nothing,
-            cuts_separate::Union{Function,Nothing}=nothing,
-            lazy_enforce::Union{Function,Nothing}=nothing,
-            lazy_separate::Union{Function,Nothing}=nothing,
-            lp_optimizer=HiGHS.Optimizer,
+            cuts_enforce::Union{Function,Nothing} = nothing,
+            cuts_separate::Union{Function,Nothing} = nothing,
+            lazy_enforce::Union{Function,Nothing} = nothing,
+            lazy_separate::Union{Function,Nothing} = nothing,
+            lp_optimizer = HiGHS.Optimizer,
         )
             self.inner = inner
             self.inner.ext[:miplearn] = _JumpModelExtData(
-                cuts_enforce=cuts_enforce,
-                cuts_separate=cuts_separate,
-                lazy_enforce=lazy_enforce,
-                lazy_separate=lazy_separate,
-                lp_optimizer=lp_optimizer,
+                cuts_enforce = cuts_enforce,
+                cuts_separate = cuts_separate,
+                lazy_enforce = lazy_enforce,
+                lazy_separate = lazy_separate,
+                lp_optimizer = lp_optimizer,
             )
         end
 
@@ -414,7 +412,7 @@ function __init_solvers_jump__()
             constrs_lhs,
             constrs_sense,
             constrs_rhs,
-            stats=nothing,
+            stats = nothing,
         ) = _add_constrs(
             self.inner,
             from_str_array(var_names),
@@ -430,14 +428,14 @@ function __init_solvers_jump__()
 
         extract_after_mip(self, h5) = _extract_after_mip(self.inner, h5)
 
-        fix_variables(self, var_names, var_values, stats=nothing) =
+        fix_variables(self, var_names, var_values, stats = nothing) =
             _fix_variables(self.inner, from_str_array(var_names), var_values, stats)
 
         optimize(self) = _optimize(self.inner)
 
         relax(self) = Class(_relax(self.inner))
 
-        set_warm_starts(self, var_names, var_values, stats=nothing) =
+        set_warm_starts(self, var_names, var_values, stats = nothing) =
             _set_warm_starts(self.inner, from_str_array(var_names), var_values, stats)
 
         write(self, filename) = _write(self.inner, filename)

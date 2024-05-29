@@ -2,7 +2,7 @@
 
 @inline frac2(x::Float64) = ceil(x) - x
 
-function assert_leq(a, b; atol=0.01)
+function assert_leq(a, b; atol = 0.01)
     if !all(a .<= b .+ atol)
         delta = a .- b
         for i in eachindex(delta)
@@ -14,7 +14,7 @@ function assert_leq(a, b; atol=0.01)
     end
 end
 
-function assert_eq(a, b; atol=1e-4)
+function assert_eq(a, b; atol = 1e-4)
     if !all(abs.(a .- b) .<= atol)
         delta = abs.(a .- b)
         for i in eachindex(delta)
@@ -26,7 +26,7 @@ function assert_eq(a, b; atol=1e-4)
     end
 end
 
-function assert_cuts_off(cuts::ConstraintSet, x::Vector{Float64}, tol=1e-6)
+function assert_cuts_off(cuts::ConstraintSet, x::Vector{Float64}, tol = 1e-6)
     for i = 1:length(cuts.lb)
         val = cuts.lhs[i, :]' * x
         if (val <= cuts.ub[i] - tol) && (val >= cuts.lb[i] + tol)
@@ -35,7 +35,7 @@ function assert_cuts_off(cuts::ConstraintSet, x::Vector{Float64}, tol=1e-6)
     end
 end
 
-function assert_does_not_cut_off(cuts::ConstraintSet, x::Vector{Float64}; tol=1e-6)
+function assert_does_not_cut_off(cuts::ConstraintSet, x::Vector{Float64}; tol = 1e-6)
     for i = 1:length(cuts.lb)
         val = cuts.lhs[i, :]' * x
         ub = cuts.ub[i]
