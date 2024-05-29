@@ -10,7 +10,6 @@ include("tableau/structs.jl")
 
 # include("blackbox/cplex.jl")
 include("tableau/numerics.jl")
-include("tableau/collect.jl")
 include("tableau/gmi.jl")
 include("tableau/moi.jl")
 include("tableau/tableau.jl")

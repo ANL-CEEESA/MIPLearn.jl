@@ -86,11 +86,7 @@ function bb_run(optimizer_name, optimizer; large = true)
                     BB.ReliabilityBranching(aggregation = :min, collect = true),
                 ]
                     h5 = H5File("$FIXTURES/$instance.h5")
-                    mip_lower_bound = h5.get_scalar("mip_lower_bound")
-                    mip_upper_bound = h5.get_scalar("mip_upper_bound")
-                    mip_sense = h5.get_scalar("mip_sense")
-                    mip_primal_bound =
-                        mip_sense == "min" ? mip_upper_bound : mip_lower_bound
+                    mip_obj_bound = h5.get_scalar("mip_obj_bound")
                     h5.file.close()
 
                     mip = BB.init(optimizer)
@@ -98,7 +94,7 @@ function bb_run(optimizer_name, optimizer; large = true)
                     @info optimizer_name, branch_rule, instance
                     @time BB.solve!(
                         mip,
-                        initial_primal_bound = mip_primal_bound,
+                        initial_primal_bound = mip_obj_bound,
                         print_interval = 1,
                         node_limit = 25,
                         branch_rule = branch_rule,

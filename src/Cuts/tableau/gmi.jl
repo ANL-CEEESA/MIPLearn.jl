@@ -154,7 +154,7 @@ function collect_gmi(
         else
             all_cuts.lhs = [all_cuts.lhs; cuts.lhs[keep, :]]
             all_cuts.lb = [all_cuts.lb; cuts.lb[keep]]
-            all_cuts.lb = [all_cuts.lb; cuts.lb[keep]]
+            all_cuts.ub = [all_cuts.ub; cuts.ub[keep]]
         end
         push!(stats_ncuts, length(all_cuts.lb))
 

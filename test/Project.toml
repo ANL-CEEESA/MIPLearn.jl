@@ -17,6 +17,7 @@ MIPLearn = "2b1277c3-b477-4c49-a15e-7ba350325c68"
 PyCall = "438e738f-606a-5dbb-bf0a-cddfbfd45ab0"
 Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
 SCIP = "82193955-e24f-5292-bf16-6f2c5261a85f"
+SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [compat]

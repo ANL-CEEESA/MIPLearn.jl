@@ -4,6 +4,7 @@
 
 using MIPLearn
 using JLD2
+using SparseArrays
 
 struct _TestStruct
     n::Int
@@ -35,6 +36,8 @@ function test_h5()
     _test_roundtrip_array(h5, [1, 2, 3])
     _test_roundtrip_array(h5, [1.0, 2.0, 3.0])
     _test_roundtrip_str_array(h5, ["A", "BB", "CCC"])
+    _test_roundtrip_sparse(h5, sparse([1; 2; 3], [1; 2; 3], [1; 2; 3]))
+    # _test_roundtrip_sparse(h5, sparse([1; 2; 3], [1; 2; 3], [1; 2; 3], 4, 4))
     @test h5.get_array("unknown-key") === nothing
     h5.close()
 end
@@ -77,5 +80,13 @@ function _test_roundtrip_str_array(h5, original)
     h5.put_array("key", MIPLearn.to_str_array(original))
     recovered = MIPLearn.from_str_array(h5.get_array("key"))
     @test recovered !== nothing
+    @test all(original .== recovered)
+end
+
+function _test_roundtrip_sparse(h5, original)
+    h5.put_sparse("key", original)
+    recovered = MIPLearn.convert(SparseMatrixCSC, h5.get_sparse("key"))
+    @test recovered !== nothing
+    @test size(original) == size(recovered)
     @test all(original .== recovered)
 end
