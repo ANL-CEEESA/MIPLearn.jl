@@ -33,7 +33,7 @@ function test_cuts()
     comp = MemorizingCutsComponent(clf = clf, extractor = extractor)
     solver = LearningSolver(components = [comp])
     solver.fit(data_filenames)
-    stats = solver.optimize(
+    model, stats = solver.optimize(
         data_filenames[1],
         data -> build_stab_model_jump(data, optimizer = SCIP.Optimizer),
     )

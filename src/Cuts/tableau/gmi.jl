@@ -16,7 +16,6 @@ function collect_gmi(
     max_cuts_per_round = 100,
     atol = 1e-4,
 )
-    @info mps_filename
     reset_timer!()
 
     # Open HDF5 file
