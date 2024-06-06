@@ -140,19 +140,9 @@ function to_model(data::ProblemData, tol = 1e-6)::Model
 end
 
 function add_constraint_set(model::JuMP.Model, cs::ConstraintSet)
-    vars = all_variables(model)
-    nrows, _ = size(cs.lhs)
-    constrs = []
-    for i = 1:nrows
-        c = nothing
-        if isinf(cs.ub[i])
-            c = @constraint(model, cs.lb[i] <= dot(cs.lhs[i, :], vars))
-        elseif isinf(cs.lb[i])
-            c = @constraint(model, dot(cs.lhs[i, :], vars) <= cs.ub[i])
-        else
-            c = @constraint(model, cs.lb[i] <= dot(cs.lhs[i, :], vars) <= cs.ub[i])
-        end
-        push!(constrs, c)
+    constrs = build_constraints(model, cs)
+    for c in constrs
+        add_constraint(model, c)
     end
     return constrs
 end
@@ -164,4 +154,22 @@ function set_warm_start(model::JuMP.Model, x::Vector{Float64})
     end
 end
 
-export to_model, ProblemData, add_constraint_set, set_warm_start
+function build_constraints(model::JuMP.Model, cs::ConstraintSet)
+    vars = all_variables(model)
+    nrows, _ = size(cs.lhs)
+    constrs = []
+    for i = 1:nrows
+        c = nothing
+        if isinf(cs.ub[i])
+            c = @build_constraint(cs.lb[i] <= dot(cs.lhs[i, :], vars))
+        elseif isinf(cs.lb[i])
+            c = @build_constraint(dot(cs.lhs[i, :], vars) <= cs.ub[i])
+        else
+            c = @build_constraint(cs.lb[i] <= dot(cs.lhs[i, :], vars) <= cs.ub[i])
+        end
+        push!(constrs, c)
+    end
+    return constrs
+end
+
+export to_model, ProblemData, add_constraint_set, set_warm_start, build_constraints

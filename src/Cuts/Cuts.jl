@@ -4,6 +4,8 @@
 
 module Cuts
 
+using PyCall
+
 import ..to_str_array
 
 include("tableau/structs.jl")
@@ -15,5 +17,9 @@ include("tableau/gmi_dual.jl")
 include("tableau/moi.jl")
 include("tableau/tableau.jl")
 include("tableau/transform.jl")
+
+function __init__()
+    __init_gmi_dual__()
+end
 
 end # module

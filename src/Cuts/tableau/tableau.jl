@@ -54,8 +54,8 @@ end
 
 function compute_tableau(
     data::ProblemData,
-    basis::Basis,
-    x::Vector{Float64};
+    basis::Basis;
+    x::Union{Nothing,Vector{Float64}} = nothing,
     rows::Union{Vector{Int},Nothing} = nothing,
     tol = 1e-8,
 )::Tableau
@@ -73,7 +73,8 @@ function compute_tableau(
         factor = klu(sparse(lhs_b'))
     end
 
-    @timeit "Compute tableau LHS" begin
+    @timeit "Compute tableau" begin
+        tableau_rhs = []
         tableau_lhs_I = Int[]
         tableau_lhs_J = Int[]
         tableau_lhs_V = Float64[]
@@ -88,6 +89,8 @@ function compute_tableau(
             end
             @timeit "Multiply" begin
                 row = sol' * data.constr_lhs
+                rhs = sol' * data.constr_ub
+                push!(tableau_rhs, rhs)
             end
             @timeit "Sparsify & copy" begin
                 for (j, v) in enumerate(row)
@@ -104,22 +107,19 @@ function compute_tableau(
             sparse(tableau_lhs_I, tableau_lhs_J, tableau_lhs_V, length(rows), ncols)
     end
 
-    @timeit "Compute tableau RHS" begin
-        tableau_rhs = [x[basis.var_basic]; zeros(length(basis.constr_basic))][rows]
-    end
-
     @timeit "Compute tableau objective row" begin
         sol = factor \ obj_b
         tableau_obj = -data.obj' + sol' * data.constr_lhs
         tableau_obj[abs.(tableau_obj).<tol] .= 0
     end
 
-    return Tableau(
-        obj = tableau_obj,
-        lhs = tableau_lhs,
-        rhs = tableau_rhs,
-        z = dot(data.obj, x),
-    )
+    # Compute z if solution is provided
+    z = 0
+    if x !== nothing
+        z = dot(data.obj, x)
+    end
+
+    return Tableau(obj = tableau_obj, lhs = tableau_lhs, rhs = tableau_rhs, z = z)
 end
 
 export get_basis, get_x, compute_tableau
