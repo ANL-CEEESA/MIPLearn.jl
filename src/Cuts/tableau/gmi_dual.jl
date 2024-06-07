@@ -52,14 +52,14 @@ function collect_gmi_dual(
 
     @timeit "Read problem" begin
         model = read_from_file(mps_filename)
-        or_obj_f = objective_function(model)
-        revised_obj = objective_function(model)
+        set_optimizer(model, optimizer)
+        obj_original = objective_function(model)
     end
 
     for round = 1:max_rounds
         @info "Round $(round)..."
 
-        @timeit "Convert to standard form" begin
+        @timeit "Convert model to standard form" begin
             # Extract problem data
             data = ProblemData(model)
 
@@ -83,7 +83,8 @@ function collect_gmi_dual(
             assert_eq(data_s.constr_lhs * sol_opt_s, data_s.constr_lb)
         end
 
-        @timeit "Optimize standard form" begin
+        @timeit "Optimize standard model" begin
+            @info "Optimizing standard model..."
             optimize!(model_s)
             if round == 1
                 obj = objective_value(model_s) + data_s.obj_offset
@@ -128,7 +129,7 @@ function collect_gmi_dual(
             end
         end
 
-        @timeit "Add GMI cuts to original problem" begin
+        @timeit "Add GMI cuts to original model" begin
             # Convert cuts
             cuts = backwards(transforms, cuts_s)
 
@@ -150,28 +151,23 @@ function collect_gmi_dual(
             constrs, gmi_exps = add_constraint_set_dual_v2(model, all_cuts)
         end
 
-        @timeit "Optimize original form" begin
-            set_objective_function(model, or_obj_f)
-            set_optimizer(model, optimizer)
+        @timeit "Optimize original model" begin
+            set_objective_function(model, obj_original)
             undo_relax = relax_integrality(model)
+            @info "Optimizing original model (constr)..."
             optimize!(model)
-            obj = objective_value(model)
-            push!(stats_obj, obj)
-            push!(stats_gap, gap(obj))
+            obj1 = objective_value(model)
+            push!(stats_obj, obj1)
+            push!(stats_gap, gap(obj1))
+            sp = [shadow_price(c) for c in constrs]
         end
 
         @timeit "Reoptimize with updated obj function" begin
-            revised_obj = (
-                or_obj_f - sum(
-                    shadow_price(c) * gmi_exps[iz] for (iz, c) in enumerate(constrs)
-                )
-            )
             delete.(model, constrs)
-            set_objective_function(model, revised_obj)
-            set_optimizer(model, optimizer)
-            optimize!(model)
-            n_obj = objective_value(model)
-            assert_eq(obj, n_obj, atol = 0.01)
+            set_objective_function(
+                model,
+                obj_original - sum(sp[i] * gmi_exps[i] for (i, c) in enumerate(constrs)),
+            )
         end
         undo_relax()
     end
@@ -403,11 +399,8 @@ function _dualgmi_set_callback(model, all_cuts)
 end
 
 function KnnDualGmiComponent_fit(data::_KnnDualGmiData, train_h5)
-    x = hcat([
-        _dualgmi_features(filename, data.extractor)
-        for filename in train_h5
-    ]...)'
-    model = pyimport("sklearn.neighbors").NearestNeighbors(n_neighbors=data.k)
+    x = hcat([_dualgmi_features(filename, data.extractor) for filename in train_h5]...)'
+    model = pyimport("sklearn.neighbors").NearestNeighbors(n_neighbors = data.k)
     model.fit(x)
     data.model = model
     data.train_h5 = train_h5
@@ -417,7 +410,7 @@ end
 function KnnDualGmiComponent_before_mip(data::_KnnDualGmiData, test_h5, model, stats)
     x = _dualgmi_features(test_h5, data.extractor)
     x = reshape(x, 1, length(x))
-    selected = vec(data.model.kneighbors(x, return_distance=false)) .+ 1
+    selected = vec(data.model.kneighbors(x, return_distance = false)) .+ 1
     @info "Dual GMI: Nearest neighbors:"
     for h5_filename in data.train_h5[selected]
         @info "    $(h5_filename)"
