@@ -126,6 +126,8 @@ function collect_gmi_dual(
             if length(cuts_s.lb) == 0
                 @info "No cuts generated. Aborting."
                 break
+            else
+                @info "Generated $(length(cuts_s.lb)) cuts"
             end
         end
 
@@ -153,6 +155,7 @@ function collect_gmi_dual(
             end
 
             @timeit "Add to model" begin
+                @info "Adding $(length(all_cuts.lb)) constraints to original model"
                 constrs, gmi_exps = add_constraint_set_dual_v2(model, all_cuts)
             end
         end
@@ -166,16 +169,28 @@ function collect_gmi_dual(
             push!(stats_obj, obj1)
             push!(stats_gap, gap(obj1))
             sp = [shadow_price(c) for c in constrs]
+            undo_relax()
         end
 
-        @timeit "Reoptimize with updated obj function" begin
+        @timeit "Update obj function of original model" begin
             delete.(model, constrs)
             set_objective_function(
                 model,
                 obj_original - sum(sp[i] * gmi_exps[i] for (i, c) in enumerate(constrs)),
             )
         end
-        undo_relax()
+
+        @timeit "Filter out useless cuts" begin
+            useful = [abs(sp[i]) > 0.001 for (i, _) in enumerate(constrs)]
+            keep = findall(useful .== true)
+            @info "Keeping only $(length(keep)) useful cuts"
+            all_cuts.lhs = all_cuts.lhs[keep, :]
+            all_cuts.lb = all_cuts.lb[keep]
+            all_cuts.ub = all_cuts.ub[keep]
+            all_cuts_bases = all_cuts_bases[keep, :]
+            all_cuts_rows = all_cuts_rows[keep, :]
+            push!(stats_ncuts, length(all_cuts_rows))
+        end
     end
 
     @timeit "Store cuts in H5 file" begin
