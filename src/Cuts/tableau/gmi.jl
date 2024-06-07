@@ -85,7 +85,7 @@ function collect_gmi(
         # Optimize standard form
         optimize!(model_s)
         stats_time_solve += solve_time(model_s)
-        obj = objective_value(model_s) + data_s.obj_offset
+        obj = objective_value(model_s)
 
         if round == 1
             # Assert standard form problem has same value as original

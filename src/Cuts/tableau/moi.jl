@@ -9,6 +9,8 @@ function ProblemData(model::Model)::ProblemData
 
     # Objective function
     obj = objective_function(model)
+    obj_offset = obj.constant
+    obj_sense = objective_sense(model)
     obj = [v ∈ keys(obj.terms) ? obj.terms[v] : 0.0 for v in vars]
 
     # Variable types, lower bounds and upper bounds
@@ -86,8 +88,9 @@ function ProblemData(model::Model)::ProblemData
     @assert length(constr_ub) == m
 
     return ProblemData(
-        obj_offset = 0.0;
         obj,
+        obj_offset,
+        obj_sense,
         constr_lb,
         constr_ub,
         constr_lhs,
@@ -102,6 +105,7 @@ function to_model(data::ProblemData, tol = 1e-6)::Model
     model = Model()
 
     # Variables
+    obj_expr = AffExpr(data.obj_offset)
     nvars = length(data.obj)
     @variable(model, x[1:nvars])
     for i = 1:nvars
@@ -117,8 +121,9 @@ function to_model(data::ProblemData, tol = 1e-6)::Model
         if isfinite(data.var_ub[i])
             set_upper_bound(x[i], data.var_ub[i])
         end
-        set_objective_coefficient(model, x[i], data.obj[i])
+        add_to_expression!(obj_expr, x[i], data.obj[i])
     end
+    @objective(model, data.obj_sense, obj_expr)
 
     # Constraints
     lhs = data.constr_lhs * x

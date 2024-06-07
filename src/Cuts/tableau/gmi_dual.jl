@@ -87,7 +87,7 @@ function collect_gmi_dual(
             @info "Optimizing standard model..."
             optimize!(model_s)
             if round == 1
-                obj = objective_value(model_s) + data_s.obj_offset
+                obj = objective_value(model_s)
                 push!(stats_obj, obj)
                 push!(stats_gap, gap(obj))
                 push!(stats_ncuts, 0)
@@ -130,25 +130,31 @@ function collect_gmi_dual(
         end
 
         @timeit "Add GMI cuts to original model" begin
-            # Convert cuts
-            cuts = backwards(transforms, cuts_s)
-
-            # Update data structs
-            bv = repeat([basis], length(selected_rows))
-            if round == 1
-                all_cuts = cuts
-                all_cuts_bases = bv
-                all_cuts_rows = selected_rows
-            else
-                all_cuts.lhs = [all_cuts.lhs; cuts.lhs]
-                all_cuts.lb = [all_cuts.lb; cuts.lb]
-                all_cuts.ub = [all_cuts.ub; cuts.ub]
-                all_cuts_bases = [all_cuts_bases; bv]
-                all_cuts_rows = [all_cuts_rows; selected_rows]
+            @timeit "Convert to original form" begin
+                cuts = backwards(transforms, cuts_s)
             end
 
-            # Add to model
-            constrs, gmi_exps = add_constraint_set_dual_v2(model, all_cuts)
+            @timeit "Prepare bv" begin
+                bv = repeat([basis], length(selected_rows))
+            end
+
+            @timeit "Append matrices" begin
+                if round == 1
+                    all_cuts = cuts
+                    all_cuts_bases = bv
+                    all_cuts_rows = selected_rows
+                else
+                    all_cuts.lhs = [all_cuts.lhs; cuts.lhs]
+                    all_cuts.lb = [all_cuts.lb; cuts.lb]
+                    all_cuts.ub = [all_cuts.ub; cuts.ub]
+                    all_cuts_bases = [all_cuts_bases; bv]
+                    all_cuts_rows = [all_cuts_rows; selected_rows]
+                end
+            end
+
+            @timeit "Add to model" begin
+                constrs, gmi_exps = add_constraint_set_dual_v2(model, all_cuts)
+            end
         end
 
         @timeit "Optimize original model" begin
@@ -322,22 +328,28 @@ function add_constraint_set_dual_v2(model::JuMP.Model, cs::ConstraintSet)
         c = nothing
         gmi_exp = nothing
         gmi_exp2 = nothing
-        expr = @expression(model, sum(cs.lhs[i, j] * vars[j] for j = 1:ncols))
-        if isinf(cs.ub[i])
-            c = @constraint(model, cs.lb[i] <= expr)
-            gmi_exp = cs.lb[i] - expr
-        elseif isinf(cs.lb[i])
-            c = @constraint(model, expr <= cs.ub[i])
-            gmi_exp = expr - cs.ub[i]
-        else
-            c = @constraint(model, cs.lb[i] <= expr <= cs.ub[i])
-            gmi_exp = cs.lb[i] - expr
-            gmi_exp2 = expr - cs.ub[i]
+        @timeit "Build expr" begin
+            expr = @expression(model, sum(cs.lhs[i, j] * vars[j] for j = 1:ncols))
         end
-        push!(constrs, c)
-        push!(gmi_exps, gmi_exp)
-        if !isnothing(gmi_exp2)
-            push!(gmi_exps, gmi_exp2)
+        @timeit "Add constraints" begin
+            if isinf(cs.ub[i])
+                c = @constraint(model, cs.lb[i] <= expr)
+                gmi_exp = cs.lb[i] - expr
+            elseif isinf(cs.lb[i])
+                c = @constraint(model, expr <= cs.ub[i])
+                gmi_exp = expr - cs.ub[i]
+            else
+                c = @constraint(model, cs.lb[i] <= expr <= cs.ub[i])
+                gmi_exp = cs.lb[i] - expr
+                gmi_exp2 = expr - cs.ub[i]
+            end
+        end
+        @timeit "Update structs" begin
+            push!(constrs, c)
+            push!(gmi_exps, gmi_exp)
+            if !isnothing(gmi_exp2)
+                push!(gmi_exps, gmi_exp2)
+            end
         end
     end
     return constrs, gmi_exps
