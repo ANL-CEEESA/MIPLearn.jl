@@ -60,9 +60,6 @@ function collect_gmi_dual(
         @info "Round $(round)..."
 
         @timeit "Convert to standard form" begin
-            # Update objective function
-            set_objective_function(model, revised_obj)
-
             # Extract problem data
             data = ProblemData(model)
 
