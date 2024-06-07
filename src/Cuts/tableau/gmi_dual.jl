@@ -16,14 +16,6 @@ Base.@kwdef mutable struct _KnnDualGmiData
     model = nothing
 end
 
-Base.@kwdef mutable struct ConstraintSet_v2
-    lhs::SparseMatrixCSC
-    ub::Vector{Float64}
-    lb::Vector{Float64}
-    Bss::Vector{Basis}
-    Bv::Vector{Int64}
-end
-
 function collect_gmi_dual(
     mps_filename;
     optimizer,
@@ -52,11 +44,10 @@ function collect_gmi_dual(
         stats_obj = []
         stats_gap = []
         stats_ncuts = []
-        all_cuts = nothing
-        all_cuts_v2 = nothing
-        cuts_all = nothing
-        cuts_all_v2 = nothing
         original_basis = nothing
+        all_cuts = nothing
+        all_cuts_bases = nothing
+        all_cuts_rows = nothing
     end
 
     @timeit "Read problem" begin
@@ -141,26 +132,25 @@ function collect_gmi_dual(
         end
 
         @timeit "Add GMI cuts to original problem" begin
+            # Convert cuts
             cuts = backwards(transforms, cuts_s)
-            if round == 1
-                cuts_all = cuts
-                basis_vec = repeat([basis], length(selected_rows))
-                cuts_all_v2 =
-                    ConstraintSet_v2(cuts.lhs, cuts.ub, cuts.lb, basis_vec, selected_rows)
-            else
-                # v1 struct
-                cuts_all.lb = [cuts_all.lb; cuts.lb]
-                cuts_all.ub = [cuts_all.ub; cuts.ub]
-                cuts_all.lhs = [cuts_all.lhs; cuts.lhs]
 
-                # v2 struct
-                cuts_all_v2.lb = [cuts_all_v2.lb; cuts.lb]
-                cuts_all_v2.ub = [cuts_all_v2.ub; cuts.ub]
-                cuts_all_v2.lhs = [cuts_all_v2.lhs; cuts.lhs]
-                cuts_all_v2.Bss = [cuts_all_v2.Bss; repeat([basis], length(selected_rows))]
-                cuts_all_v2.Bv = [cuts_all_v2.Bv; selected_rows]
+            # Update data structs
+            bv = repeat([basis], length(selected_rows))
+            if round == 1
+                all_cuts = cuts
+                all_cuts_bases = bv
+                all_cuts_rows = selected_rows
+            else
+                all_cuts.lhs = [all_cuts.lhs; cuts.lhs]
+                all_cuts.lb = [all_cuts.lb; cuts.lb]
+                all_cuts.ub = [all_cuts.ub; cuts.ub]
+                all_cuts_bases = [all_cuts_bases; bv]
+                all_cuts_rows = [all_cuts_rows; selected_rows]
             end
-            constrs, gmi_exps = add_constraint_set_dual_v2(model, cuts_all)
+
+            # Add to model
+            constrs, gmi_exps = add_constraint_set_dual_v2(model, all_cuts)
         end
 
         @timeit "Optimize original form" begin
@@ -189,37 +179,39 @@ function collect_gmi_dual(
         undo_relax()
     end
 
-    @timeit "Store cuts" begin
+    @timeit "Store cuts in H5 file" begin
         if all_cuts !== nothing
-            cut_sizezz = length(all_cuts_v2.Bv)
-            var_totall =
+            ncuts = length(all_cuts_rows)
+            total =
                 length(original_basis.var_basic) +
                 length(original_basis.var_nonbasic) +
                 length(original_basis.constr_basic) +
                 length(original_basis.constr_nonbasic)
-            bm_size = Array{Int64,2}(undef, cut_sizezz, 4)
-            basis_matrix = Array{Int64,2}(undef, cut_sizezz, var_totall)
-
-            for ii = 1:cut_sizezz
-                vb = all_cuts_v2.Bss[ii].var_basic
-                vn = all_cuts_v2.Bss[ii].var_nonbasic
-                cb = all_cuts_v2.Bss[ii].constr_basic
-                cn = all_cuts_v2.Bss[ii].constr_nonbasic
-                bm_size[ii, :] = [length(vb) length(vn) length(cb) length(cn)]
-                basis_matrix[ii, :] = [vb' vn' cb' cn']
+            all_cuts_basis_sizes = Array{Int64,2}(undef, ncuts, 4)
+            all_cuts_basis_vars = Array{Int64,2}(undef, ncuts, total)
+            for i = 1:ncuts
+                vb = all_cuts_bases[i].var_basic
+                vn = all_cuts_bases[i].var_nonbasic
+                cb = all_cuts_bases[i].constr_basic
+                cn = all_cuts_bases[i].constr_nonbasic
+                all_cuts_basis_sizes[i, :] = [length(vb) length(vn) length(cb) length(cn)]
+                all_cuts_basis_vars[i, :] = [vb' vn' cb' cn']
             end
-
             @info "Storing $(length(all_cuts.ub)) GMI cuts..."
             h5 = H5File(h5_filename)
             h5.put_sparse("cuts_lhs", all_cuts.lhs)
             h5.put_array("cuts_lb", all_cuts.lb)
             h5.put_array("cuts_ub", all_cuts.ub)
-            h5.put_array("cuts_basis_vars", basis_matrix)
-            h5.put_array("cuts_basis_sizes", bm_size)
-            h5.put_array("cuts_rows", all_cuts_v2.Bv)
+            h5.put_array("cuts_basis_vars", all_cuts_basis_vars)
+            h5.put_array("cuts_basis_sizes", all_cuts_basis_sizes)
+            h5.put_array("cuts_rows", all_cuts_rows)
             h5.file.close()
         end
     end
+
+    @show stats_gap
+    @show stats_obj
+    @show stats_ncuts
 
     print_timer()
 
