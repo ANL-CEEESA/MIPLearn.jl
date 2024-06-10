@@ -223,10 +223,8 @@ function collect_gmi_dual(
         end
     end
 
-    @show stats_gap
-    @show stats_obj
-    @show stats_ncuts
-
+    to = TimerOutputs.get_defaulttimer()
+    stats_time = TimerOutputs.tottime(to) / 1e9
     print_timer()
 
     return OrderedDict(
@@ -236,6 +234,8 @@ function collect_gmi_dual(
         "obj_mip" => obj_mip,
         "stats_obj" => stats_obj,
         "stats_gap" => stats_gap,
+        "stats_ncuts" => stats_ncuts,
+        "stats_time" => stats_time,
     )
 end
 
