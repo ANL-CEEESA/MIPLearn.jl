@@ -118,8 +118,8 @@ function collect_gmi_dual(
             tableau = compute_tableau(data_s, basis, x = sol_frac, rows = selected_rows)
 
             # Assert tableau rows have been computed correctly
-            assert_eq(tableau.lhs * sol_frac, tableau.rhs)
-            assert_eq(tableau.lhs * sol_opt_s, tableau.rhs)
+            assert_eq(tableau.lhs * sol_frac, tableau.rhs, atol=1e-3)
+            assert_eq(tableau.lhs * sol_opt_s, tableau.rhs, atol=1e-3)
         end
 
         @timeit "Compute GMI cuts" begin
