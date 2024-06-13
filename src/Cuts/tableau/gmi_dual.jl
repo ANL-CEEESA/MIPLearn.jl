@@ -48,6 +48,7 @@ function collect_gmi_dual(
         all_cuts = nothing
         all_cuts_bases = nothing
         all_cuts_rows = nothing
+        last_round_obj = nothing
     end
 
     @timeit "Read problem" begin
@@ -86,15 +87,21 @@ function collect_gmi_dual(
         @timeit "Optimize standard model" begin
             @info "Optimizing standard model..."
             optimize!(model_s)
+            obj = objective_value(model_s)
             if round == 1
-                obj = objective_value(model_s)
                 push!(stats_obj, obj)
                 push!(stats_gap, gap(obj))
                 push!(stats_ncuts, 0)
+            else
+                if obj ≈ last_round_obj
+                    @info ("No improvement in obj value. Aborting.")
+                    break
+                end
             end
             if termination_status(model_s) != MOI.OPTIMAL
                 error("Non-optimal termination status")
             end
+            last_round_obj = obj
         end
 
         @timeit "Select tableau rows" begin
@@ -165,31 +172,35 @@ function collect_gmi_dual(
             undo_relax = relax_integrality(model)
             @info "Optimizing original model (constr)..."
             optimize!(model)
-            obj1 = objective_value(model)
-            push!(stats_obj, obj1)
-            push!(stats_gap, gap(obj1))
+            obj = objective_value(model)
+            push!(stats_obj, obj)
+            push!(stats_gap, gap(obj))
             sp = [shadow_price(c) for c in constrs]
             undo_relax()
-        end
-
-        @timeit "Update obj function of original model" begin
-            delete.(model, constrs)
-            set_objective_function(
-                model,
-                obj_original - sum(sp[i] * gmi_exps[i] for (i, c) in enumerate(constrs)),
-            )
+            useful = [abs(sp[i]) > 1e-6 for (i, _) in enumerate(constrs)]
+            keep = findall(useful .== true)
         end
 
         @timeit "Filter out useless cuts" begin
-            useful = [abs(sp[i]) > 0.001 for (i, _) in enumerate(constrs)]
-            keep = findall(useful .== true)
-            @info "Keeping only $(length(keep)) useful cuts"
+            @info "Keeping $(length(keep)) useful cuts"
             all_cuts.lhs = all_cuts.lhs[keep, :]
             all_cuts.lb = all_cuts.lb[keep]
             all_cuts.ub = all_cuts.ub[keep]
             all_cuts_bases = all_cuts_bases[keep, :]
             all_cuts_rows = all_cuts_rows[keep, :]
             push!(stats_ncuts, length(all_cuts_rows))
+            if isempty(keep)
+                break
+            end
+        end
+
+        @timeit "Update obj function of original model" begin
+            delete.(model, constrs)
+            set_objective_function(
+                model,
+                obj_original -
+                sum(sp[i] * gmi_exps[i] for (i, c) in enumerate(constrs) if useful[i]),
+            )
         end
     end
 

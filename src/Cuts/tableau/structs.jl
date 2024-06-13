@@ -7,7 +7,7 @@ using SparseArrays
 Base.@kwdef mutable struct ProblemData
     obj::Vector{Float64}
     obj_offset::Float64
-    obj_sense
+    obj_sense::Any
     constr_lb::Vector{Float64}
     constr_ub::Vector{Float64}
     constr_lhs::SparseMatrixCSC
