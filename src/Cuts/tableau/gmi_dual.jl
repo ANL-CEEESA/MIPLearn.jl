@@ -38,7 +38,7 @@ function collect_gmi_dual(
     end
 
     # Define relative MIP gap
-    gap(v) = 100 * abs(obj_mip - v) / abs(v)
+    gap(v) = 100 * abs(obj_mip - v) / abs(obj_mip)
 
     @timeit "Initialize" begin
         stats_obj = []
