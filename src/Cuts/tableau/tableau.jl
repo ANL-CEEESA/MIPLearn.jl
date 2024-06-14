@@ -74,11 +74,11 @@ function compute_tableau(
     end
 
     @timeit "Compute tableau" begin
-        tableau_rhs = []
-        tableau_lhs_I = Int[]
-        tableau_lhs_J = Int[]
-        tableau_lhs_V = Float64[]
-        for k = 1:length(rows)
+        @timeit "Initialize" begin
+            tableau_rhs = zeros(length(rows))
+            tableau_lhs = zeros(length(rows), ncols)
+        end
+        for k in eachindex(1:length(rows))
             @timeit "Prepare inputs" begin
                 i = rows[k]
                 e = zeros(nrows)
@@ -88,23 +88,14 @@ function compute_tableau(
                 sol = factor \ e
             end
             @timeit "Multiply" begin
-                row = sol' * data.constr_lhs
-                rhs = sol' * data.constr_ub
-                push!(tableau_rhs, rhs)
-            end
-            @timeit "Sparsify & copy" begin
-                for (j, v) in enumerate(row)
-                    if abs(v) < tol
-                        continue
-                    end
-                    push!(tableau_lhs_I, k)
-                    push!(tableau_lhs_J, j)
-                    push!(tableau_lhs_V, v)
-                end
+                tableau_lhs[k, :] = sol' * data.constr_lhs
+                tableau_rhs[k] = sol' * data.constr_ub
             end
         end
-        tableau_lhs =
-            sparse(tableau_lhs_I, tableau_lhs_J, tableau_lhs_V, length(rows), ncols)
+        @timeit "Sparsify" begin
+            tableau_lhs[abs.(tableau_lhs) .<= tol] .= 0
+            tableau_lhs = sparse(tableau_lhs)
+        end
     end
 
     @timeit "Compute tableau objective row" begin
