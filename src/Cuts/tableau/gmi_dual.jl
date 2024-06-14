@@ -348,6 +348,14 @@ end
 function add_constraint_set_dual_v2(model::JuMP.Model, cs::ConstraintSet)
     vars = all_variables(model)
     nrows, ncols = size(cs.lhs)
+
+    @timeit "Transpose LHS" begin
+        lhs_t = spzeros(ncols, nrows)
+        ftranspose!(lhs_t, cs.lhs, x -> x)
+        lhs_t_rows = rowvals(lhs_t)
+        lhs_t_vals = nonzeros(lhs_t)
+    end
+
     constrs = []
     gmi_exps = []
     for i = 1:nrows
@@ -355,7 +363,10 @@ function add_constraint_set_dual_v2(model::JuMP.Model, cs::ConstraintSet)
         gmi_exp = nothing
         gmi_exp2 = nothing
         @timeit "Build expr" begin
-            expr = @expression(model, sum(cs.lhs[i, j] * vars[j] for j = 1:ncols))
+            expr = AffExpr()
+            for k in nzrange(lhs_t, i)
+                add_to_expression!(expr, lhs_t_vals[k], vars[lhs_t_rows[k]])
+            end
         end
         @timeit "Add constraints" begin
             if isinf(cs.ub[i])
