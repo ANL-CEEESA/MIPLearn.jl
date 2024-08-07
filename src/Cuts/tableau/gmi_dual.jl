@@ -272,7 +272,7 @@ function ExpertDualGmiComponent_before_mip(test_h5, model, stats)
     stats_time_convert = 0
     stats_time_tableau = 0
     stats_time_gmi = 0
-    all_cuts = []
+    all_cuts = nothing
 
     stats_time_convert = @elapsed begin
         # Extract problem data
@@ -320,24 +320,59 @@ function ExpertDualGmiComponent_before_mip(test_h5, model, stats)
         end
         cuts = backwards(transforms, cuts_s)
         assert_does_not_cut_off(cuts, sol_opt)
-        push!(all_cuts, cuts)
+
+        if all_cuts === nothing
+            all_cuts = cuts
+        else
+            all_cuts.lhs = [all_cuts.lhs; cuts.lhs]
+            all_cuts.lb = [all_cuts.lb; cuts.lb]
+            all_cuts.ub = [all_cuts.ub; cuts.ub]
+        end
     end
 
-    function cut_callback(cb_data)
+    # Strategy 1: Add all cuts during the first call
+    function cut_callback_1(cb_data)
         if all_cuts !== nothing
-            @info "Enforcing dual GMI cuts..."
-            for cuts in all_cuts
-                constrs = build_constraints(model, cuts)
-                for c in constrs
-                    MOI.submit(model, MOI.UserCut(cb_data), c)
-                end
+            constrs = build_constraints(model, all_cuts)
+            @info "Enforcing $(length(constrs)) cuts..."
+            for c in constrs
+                MOI.submit(model, MOI.UserCut(cb_data), c)
             end
             all_cuts = nothing
         end
     end
 
+    # Strategy 2: Add violated cuts repeatedly until unable to separate
+    callback_disabled = false
+    function cut_callback_2(cb_data)
+        if callback_disabled
+            return
+        end
+        x = all_variables(model)
+        x_val = callback_value.(cb_data, x)
+        lhs_val = all_cuts.lhs * x_val
+        is_violated = lhs_val .> all_cuts.ub
+        selected_idx = findall(is_violated .== true)
+        selected_cuts = ConstraintSet(
+            lhs=all_cuts.lhs[selected_idx, :],
+            ub=all_cuts.ub[selected_idx],
+            lb=all_cuts.lb[selected_idx],
+        )
+        constrs = build_constraints(model, selected_cuts)
+        if length(constrs) > 0
+            @info "Enforcing $(length(constrs)) cuts..."
+            for c in constrs
+                MOI.submit(model, MOI.UserCut(cb_data), c)
+            end
+        else
+            @info "No violated cuts found. Disabling callback."
+            callback_disabled = true
+        end
+    end
+
     # Set up cut callback
-    set_attribute(model, MOI.UserCutCallback(), cut_callback)
+    set_attribute(model, MOI.UserCutCallback(), cut_callback_1)
+    # set_attribute(model, MOI.UserCutCallback(), cut_callback_2)
 
     stats["gmi_time_convert"] = stats_time_convert
     stats["gmi_time_tableau"] = stats_time_tableau
