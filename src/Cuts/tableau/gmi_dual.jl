@@ -439,7 +439,8 @@ end
 function _dualgmi_generate(train_h5, model)
     data = ProblemData(model)
     data_s, transforms = convert_to_standard_form(data)
-    all_cuts = []
+    all_cuts = nothing
+    visited = Set()
     for h5_filename in train_h5
         h5 = H5File(h5_filename)
         cut_basis_vars = h5.get_array("cuts_basis_vars")
@@ -457,24 +458,36 @@ function _dualgmi_generate(train_h5, model)
                     constr_nonbasic = cut_basis_vars[r, vbb+vnn+cbb+1:vbb+vnn+cbb+cnn],
                 )
             end
+
+            # Detect and skip duplicated cuts
+            cut_id = (row, cut_basis_vars[r, :])
+            cut_id ∉ visited || continue
+            push!(visited, cut_id)
+
             tableau = compute_tableau(data_s, current_basis, rows = [row])
             cuts_s = compute_gmi(data_s, tableau)
             cuts = backwards(transforms, cuts_s)
-            push!(all_cuts, cuts)
+
+            if all_cuts === nothing
+                all_cuts = cuts
+            else
+                all_cuts.lhs = [all_cuts.lhs; cuts.lhs]
+                all_cuts.lb = [all_cuts.lb; cuts.lb]
+                all_cuts.ub = [all_cuts.ub; cuts.ub]
+            end
         end
     end
+    @info "Collected $(length(all_cuts.lb)) distinct cuts"
     return all_cuts
 end
 
 function _dualgmi_set_callback(model, all_cuts)
     function cut_callback(cb_data)
         if all_cuts !== nothing
-            @info "Dual GMI: Submitting cuts..."
-            for cuts in all_cuts
-                constrs = build_constraints(model, cuts)
-                for c in constrs
-                    MOI.submit(model, MOI.UserCut(cb_data), c)
-                end
+            constrs = build_constraints(model, all_cuts)
+            @info "Enforcing $(length(constrs)) cuts..."
+            for c in constrs
+                MOI.submit(model, MOI.UserCut(cb_data), c)
             end
             all_cuts = nothing
         end
