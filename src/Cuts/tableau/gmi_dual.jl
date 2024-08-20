@@ -5,6 +5,8 @@
 using Printf
 using JuMP
 using HiGHS
+using Random
+using DataStructures
 
 global ExpertDualGmiComponent = PyNULL()
 global KnnDualGmiComponent = PyNULL()
@@ -14,6 +16,7 @@ Base.@kwdef mutable struct _KnnDualGmiData
     extractor = nothing
     train_h5 = nothing
     model = nothing
+    strategy = nothing
 end
 
 function collect_gmi_dual(
@@ -250,7 +253,7 @@ function collect_gmi_dual(
     )
 end
 
-function ExpertDualGmiComponent_before_mip(test_h5, model, stats)
+function ExpertDualGmiComponent_before_mip(test_h5, model, _)
     # Read cuts and optimal solution
     h5 = H5File(test_h5)
     sol_opt_dict = Dict(
@@ -374,10 +377,12 @@ function ExpertDualGmiComponent_before_mip(test_h5, model, stats)
     set_attribute(model, MOI.UserCutCallback(), cut_callback_1)
     # set_attribute(model, MOI.UserCutCallback(), cut_callback_2)
 
-    stats["gmi_time_convert"] = stats_time_convert
-    stats["gmi_time_tableau"] = stats_time_tableau
-    stats["gmi_time_gmi"] = stats_time_gmi
-    return
+    stats = Dict()
+    stats["ExpertDualGmi: cuts"] = length(all_cuts.lb)
+    stats["ExpertDualGmi: time convert"] = stats_time_convert
+    stats["ExpertDualGmi: time tableau"] = stats_time_tableau
+    stats["ExpertDualGmi: time gmi"] = stats_time_gmi
+    return stats
 end
 
 function add_constraint_set_dual_v2(model::JuMP.Model, cs::ConstraintSet)
@@ -477,7 +482,6 @@ function _dualgmi_generate(train_h5, model)
             end
         end
     end
-    @info "Collected $(length(all_cuts.lb)) distinct cuts"
     return all_cuts
 end
 
@@ -497,23 +501,53 @@ end
 
 function KnnDualGmiComponent_fit(data::_KnnDualGmiData, train_h5)
     x = hcat([_dualgmi_features(filename, data.extractor) for filename in train_h5]...)'
-    model = pyimport("sklearn.neighbors").NearestNeighbors(n_neighbors = data.k)
+    model = pyimport("sklearn.neighbors").NearestNeighbors(n_neighbors = length(train_h5))
     model.fit(x)
     data.model = model
     data.train_h5 = train_h5
 end
 
 
-function KnnDualGmiComponent_before_mip(data::_KnnDualGmiData, test_h5, model, stats)
+function KnnDualGmiComponent_before_mip(data::_KnnDualGmiData, test_h5, model, _)
     x = _dualgmi_features(test_h5, data.extractor)
     x = reshape(x, 1, length(x))
-    selected = vec(data.model.kneighbors(x, return_distance = false)) .+ 1
-    @info "Dual GMI: Nearest neighbors:"
-    for h5_filename in data.train_h5[selected]
-        @info "    $(h5_filename)"
+    neigh_dist, neigh_ind = data.model.kneighbors(x, return_distance = true)
+    neigh_ind = neigh_ind .+ 1
+    N = length(neigh_dist)
+
+    if data.strategy == "near"
+        selected = collect(1:(data.k))
+    elseif data.strategy == "far"
+        selected = collect((N - data.k + 1) : N)
+    elseif data.strategy == "rand"
+        selected = shuffle(collect(1:N))[1:(data.k)]
+    else
+        error("unknown strategy: $(data.strategy)")
     end
-    cuts = _dualgmi_generate(data.train_h5[selected], model)
+
+    @info "Dual GMI: Selected neighbors ($(data.strategy)):"
+    neigh_dist = neigh_dist[selected]
+    neigh_ind = neigh_ind[selected]
+    for i in 1:data.k
+        h5_filename = data.train_h5[neigh_ind[i]]
+        dist = neigh_dist[i]
+        @info "    $(h5_filename) dist=$(dist)"
+    end
+
+    @info "Dual GMI: Generating cuts..."
+    time_generate = @elapsed begin
+        cuts = _dualgmi_generate(data.train_h5[neigh_ind], model)
+    end
+    @info "Dual GMI: Generated $(length(cuts.lb)) unique cuts in $(time_generate) seconds"
+
     _dualgmi_set_callback(model, cuts)
+
+    stats = Dict()
+    stats["KnnDualGmi: k"] = data.k
+    stats["KnnDualGmi: strategy"] = data.strategy
+    stats["KnnDualGmi: cuts"] = length(cuts.lb)
+    stats["KnnDualGmi: time generate"] = time_generate
+    return stats
 end
 
 function __init_gmi_dual__()
@@ -526,14 +560,14 @@ function __init_gmi_dual__()
     copy!(ExpertDualGmiComponent, Class1)
 
     @pydef mutable struct Class2
-        function __init__(self; extractor, k = 3)
-            self.data = _KnnDualGmiData(; extractor, k)
+        function __init__(self; extractor, k = 3, strategy = "near")
+            self.data = _KnnDualGmiData(; extractor, k, strategy)
         end
         function fit(self, train_h5)
             KnnDualGmiComponent_fit(self.data, train_h5)
         end
         function before_mip(self, test_h5, model, stats)
-            KnnDualGmiComponent_before_mip(self.data, test_h5, model.inner, stats)
+            return KnnDualGmiComponent_before_mip(self.data, test_h5, model.inner, stats)
         end
     end
     copy!(KnnDualGmiComponent, Class2)
