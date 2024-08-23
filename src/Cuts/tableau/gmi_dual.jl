@@ -442,34 +442,69 @@ function _dualgmi_features(h5_filename, extractor)
 end
 
 function _dualgmi_generate(train_h5, model)
-    data = ProblemData(model)
-    data_s, transforms = convert_to_standard_form(data)
-    all_cuts = nothing
-    visited = Set()
-    for h5_filename in train_h5
-        h5 = H5File(h5_filename)
-        cut_basis_vars = h5.get_array("cuts_basis_vars")
-        cut_basis_sizes = h5.get_array("cuts_basis_sizes")
-        cut_rows = h5.get_array("cuts_rows")
-        h5.close()
-        current_basis = nothing
-        for (r, row) in enumerate(cut_rows)
-            if r == 1 || cut_basis_vars[r, :] != cut_basis_vars[r-1, :]
-                vbb, vnn, cbb, cnn = cut_basis_sizes[r, :]
-                current_basis = Basis(;
-                    var_basic = cut_basis_vars[r, 1:vbb],
-                    var_nonbasic = cut_basis_vars[r, vbb+1:vbb+vnn],
-                    constr_basic = cut_basis_vars[r, vbb+vnn+1:vbb+vnn+cbb],
-                    constr_nonbasic = cut_basis_vars[r, vbb+vnn+cbb+1:vbb+vnn+cbb+cnn],
-                )
+    @timeit "Read problem data" begin
+        data = ProblemData(model)
+    end
+    @timeit "Convert to standard form" begin
+        data_s, transforms = convert_to_standard_form(data)
+    end
+
+    @timeit "Collect cuts from H5 files" begin
+        cut_basis_vars = nothing
+        cut_basis_sizes = nothing
+        cut_rows = nothing
+        for h5_filename in train_h5
+            h5 = H5File(h5_filename)
+            cut_basis_vars_sample = h5.get_array("cuts_basis_vars")
+            cut_basis_sizes_sample = h5.get_array("cuts_basis_sizes")
+            cut_rows_sample = h5.get_array("cuts_rows")
+            if cut_basis_vars === nothing
+                cut_basis_vars = cut_basis_vars_sample
+                cut_basis_sizes = cut_basis_sizes_sample
+                cut_rows = cut_rows_sample
+            else
+                cut_basis_vars = [cut_basis_vars; cut_basis_vars_sample]
+                cut_basis_sizes = [cut_basis_sizes; cut_basis_sizes_sample]
+                cut_rows = [cut_rows; cut_rows_sample]
             end
+            h5.close()
+        end
+        ncuts, nvars = size(cut_basis_vars)
+    end
 
-            # Detect and skip duplicated cuts
-            cut_id = (row, cut_basis_vars[r, :])
-            cut_id ∉ visited || continue
-            push!(visited, cut_id)
+    @timeit "Group cuts by tableau basis" begin
+        vars_to_unique_basis_offset = Dict()
+        unique_basis_vars = Matrix{Int}(undef, 0, nvars)
+        unique_basis_sizes = Matrix{Int}(undef, 0, 4)
+        unique_basis_rows = Dict{Int,Set{Int}}()
+        for i in 1:ncuts
+            vars = cut_basis_vars[i, :]
+            sizes = cut_basis_sizes[i, :]
+            row = cut_rows[i]
+            if vars ∉ keys(vars_to_unique_basis_offset)
+                offset = size(unique_basis_vars)[1] + 1
+                vars_to_unique_basis_offset[vars] = offset
+                unique_basis_vars = [unique_basis_vars; vars']
+                unique_basis_sizes = [unique_basis_sizes; sizes']
+                unique_basis_rows[offset] = Set()
+            end
+            offset = vars_to_unique_basis_offset[vars]
+            push!(unique_basis_rows[offset], row)
+        end
+    end
 
-            tableau = compute_tableau(data_s, current_basis, rows = [row])
+    @timeit "Compute tableaus and cuts" begin
+        all_cuts = nothing
+        for (offset, rows) in unique_basis_rows
+            vbb, vnn, cbb, cnn = unique_basis_sizes[offset, :]
+            current_basis = Basis(;
+                var_basic = unique_basis_vars[offset, 1:vbb],
+                var_nonbasic = unique_basis_vars[offset, vbb+1:vbb+vnn],
+                constr_basic = unique_basis_vars[offset, vbb+vnn+1:vbb+vnn+cbb],
+                constr_nonbasic = unique_basis_vars[offset, vbb+vnn+cbb+1:vbb+vnn+cbb+cnn],
+            )
+
+            tableau = compute_tableau(data_s, current_basis; rows=collect(rows))
             cuts_s = compute_gmi(data_s, tableau)
             cuts = backwards(transforms, cuts_s)
 
@@ -509,38 +544,51 @@ end
 
 
 function KnnDualGmiComponent_before_mip(data::_KnnDualGmiData, test_h5, model, _)
-    x = _dualgmi_features(test_h5, data.extractor)
-    x = reshape(x, 1, length(x))
-    neigh_dist, neigh_ind = data.model.kneighbors(x, return_distance = true)
-    neigh_ind = neigh_ind .+ 1
-    N = length(neigh_dist)
+    reset_timer!()
 
-    if data.strategy == "near"
-        selected = collect(1:(data.k))
-    elseif data.strategy == "far"
-        selected = collect((N - data.k + 1) : N)
-    elseif data.strategy == "rand"
-        selected = shuffle(collect(1:N))[1:(data.k)]
-    else
-        error("unknown strategy: $(data.strategy)")
+    @timeit "Extract features" begin
+        x = _dualgmi_features(test_h5, data.extractor)
+        x = reshape(x, 1, length(x))
     end
 
-    @info "Dual GMI: Selected neighbors ($(data.strategy)):"
-    neigh_dist = neigh_dist[selected]
-    neigh_ind = neigh_ind[selected]
-    for i in 1:data.k
-        h5_filename = data.train_h5[neigh_ind[i]]
-        dist = neigh_dist[i]
-        @info "    $(h5_filename) dist=$(dist)"
+    @timeit "Find neighbors" begin
+        neigh_dist, neigh_ind = data.model.kneighbors(x, return_distance = true)
+        neigh_ind = neigh_ind .+ 1
+        N = length(neigh_dist)
+
+        if data.strategy == "near"
+            selected = collect(1:(data.k))
+        elseif data.strategy == "far"
+            selected = collect((N - data.k + 1) : N)
+        elseif data.strategy == "rand"
+            selected = shuffle(collect(1:N))[1:(data.k)]
+        else
+            error("unknown strategy: $(data.strategy)")
+        end
+
+        @info "Dual GMI: Selected neighbors ($(data.strategy)):"
+        neigh_dist = neigh_dist[selected]
+        neigh_ind = neigh_ind[selected]
+        for i in 1:data.k
+            h5_filename = data.train_h5[neigh_ind[i]]
+            dist = neigh_dist[i]
+            @info "    $(h5_filename) dist=$(dist)"
+        end
     end
 
     @info "Dual GMI: Generating cuts..."
-    time_generate = @elapsed begin
-        cuts = _dualgmi_generate(data.train_h5[neigh_ind], model)
+    @timeit "Generate cuts" begin
+        time_generate = @elapsed begin
+            cuts = _dualgmi_generate(data.train_h5[neigh_ind], model)
+        end
+        @info "Dual GMI: Generated $(length(cuts.lb)) unique cuts in $(time_generate) seconds"
     end
-    @info "Dual GMI: Generated $(length(cuts.lb)) unique cuts in $(time_generate) seconds"
 
-    _dualgmi_set_callback(model, cuts)
+    @timeit "Set callback" begin
+        _dualgmi_set_callback(model, cuts)
+    end
+
+    print_timer()
 
     stats = Dict()
     stats["KnnDualGmi: k"] = data.k
@@ -567,10 +615,11 @@ function __init_gmi_dual__()
             KnnDualGmiComponent_fit(self.data, train_h5)
         end
         function before_mip(self, test_h5, model, stats)
-            return KnnDualGmiComponent_before_mip(self.data, test_h5, model.inner, stats)
+            return @time KnnDualGmiComponent_before_mip(self.data, test_h5, model.inner, stats)
         end
     end
     copy!(KnnDualGmiComponent, Class2)
 end
 
 export collect_gmi_dual, expert_gmi_dual, ExpertDualGmiComponent, KnnDualGmiComponent
+

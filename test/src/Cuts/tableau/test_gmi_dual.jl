@@ -4,6 +4,7 @@
 
 using SCIP
 using HiGHS
+using MIPLearn.Cuts
 
 function test_cuts_tableau_gmi_dual_collect()
     mps_filename = "$BASEDIR/../fixtures/bell5.mps.gz"
@@ -31,15 +32,15 @@ function test_cuts_tableau_gmi_dual_usage()
 
     mps_filename = "$BASEDIR/../fixtures/bell5.mps.gz"
     h5_filename = "$BASEDIR/../fixtures/bell5.h5"
-    # rm(h5_filename, force=true)
+    rm(h5_filename, force=true)
 
-    # # Run basic collector
-    # bc = BasicCollector(write_mps = false, skip_lp = true)
-    # bc.collect([mps_filename], build_model)
+    # Run basic collector
+    bc = BasicCollector(write_mps = false, skip_lp = true)
+    bc.collect([mps_filename], build_model)
 
-    # # Run dual GMI collector
-    # @info "Running dual GMI collector..."
-    # collect_gmi_dual(mps_filename, optimizer = HiGHS.Optimizer)
+    # Run dual GMI collector
+    @info "Running dual GMI collector..."
+    collect_gmi_dual(mps_filename, optimizer = HiGHS.Optimizer)
 
     # # Test expert component
     # solver = LearningSolver(
@@ -65,6 +66,5 @@ function test_cuts_tableau_gmi_dual_usage()
         skip_lp = true,
     )
     solver.optimize(mps_filename, build_model)
-
     return
 end
