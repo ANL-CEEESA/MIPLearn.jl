@@ -164,13 +164,21 @@ function build_constraints(model::JuMP.Model, cs::ConstraintSet)
     nrows, _ = size(cs.lhs)
     constrs = []
     for i = 1:nrows
+        # Build LHS expression
+        row = cs.lhs[i, :]
+        lhs_expr = AffExpr()
+        for (offset, val) in enumerate(row.nzval)
+            add_to_expression!(lhs_expr, vars[row.nzind[offset]], val)
+        end
+
+        # Build JuMP constraint
         c = nothing
         if isinf(cs.ub[i])
-            c = @build_constraint(cs.lb[i] <= dot(cs.lhs[i, :], vars))
+            c = @build_constraint(cs.lb[i] <= lhs_expr)
         elseif isinf(cs.lb[i])
-            c = @build_constraint(dot(cs.lhs[i, :], vars) <= cs.ub[i])
+            c = @build_constraint(lhs_expr <= cs.ub[i])
         else
-            c = @build_constraint(cs.lb[i] <= dot(cs.lhs[i, :], vars) <= cs.ub[i])
+            c = @build_constraint(cs.lb[i] <= lhs_expr <= cs.ub[i])
         end
         push!(constrs, c)
     end
