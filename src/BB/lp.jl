@@ -134,7 +134,11 @@ function _get_int_variables(
                 var_ub = constr.upper
                 MOI.delete(optimizer, _upper_bound_index(var))
             end
-            MOI.add_constraint(optimizer, var, MOI.Interval(var_lb, var_ub))
+            MOI.add_constraint(
+                optimizer,
+                MOI.VariableIndex(var.index),
+                MOI.Interval(var_lb, var_ub),
+            )
         end
         push!(vars, var)
         push!(lb, var_lb)
