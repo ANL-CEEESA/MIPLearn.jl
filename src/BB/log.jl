@@ -6,7 +6,7 @@ using Printf
 
 function print_progress_header()
     @printf(
-        "%8s %9s %9s %13s %13s %9s %6s %13s %6s %-24s %9s %9s %6s %6s",
+        "%8s %9s %9s %13s %13s %9s %9s %13s %9s %-24s %9s %9s %6s %6s",
         "time",
         "processed",
         "pending",
@@ -46,7 +46,7 @@ function print_progress(
             branch_ub = @sprintf("%9.2f", last(node.branch_ub))
         end
         @printf(
-            "%8.2f %9d %9d %13.6e %13.6e %9.2e %6d %13.6e %6s %-24s %9s %9s %6d %6d",
+            "%8.2f %9d %9d %13.6e %13.6e %9.2e %9d %13.6e %9s %-24s %9s %9s %6d %6d",
             time_elapsed,
             pool.processed,
             length(pool.processing) + length(pool.pending),
