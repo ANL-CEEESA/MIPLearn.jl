@@ -89,14 +89,27 @@ function _extract_after_load_vars(model::JuMP.Model, h5)
         for v in vars
     ]
     types = [JuMP.is_binary(v) ? "B" : JuMP.is_integer(v) ? "I" : "C" for v in vars]
-    obj = objective_function(model, AffExpr)
-    obj_coeffs = [v ∈ keys(obj.terms) ? obj.terms[v] : 0.0 for v in vars]
+
+    # Linear obj terms
+    obj = objective_function(model, QuadExpr)
+    obj_coeffs_linear = [v ∈ keys(obj.aff.terms) ? obj.aff.terms[v] : 0.0 for v in vars]
+
+    # Quadratic obj terms
+    if length(obj) > 0
+        nvars = length(vars)
+        obj_coeffs_quad = zeros(nvars, nvars)
+        for (pair, coeff) in obj.terms
+            obj_coeffs_quad[pair.a.index.value, pair.b.index.value] = coeff
+        end
+        h5.put_array("static_var_obj_coeffs_quad", obj_coeffs_quad)
+    end
+
     h5.put_array("static_var_names", to_str_array(JuMP.name.(vars)))
     h5.put_array("static_var_types", to_str_array(types))
     h5.put_array("static_var_lower_bounds", lb)
     h5.put_array("static_var_upper_bounds", ub)
-    h5.put_array("static_var_obj_coeffs", obj_coeffs)
-    h5.put_scalar("static_obj_offset", obj.constant)
+    h5.put_array("static_var_obj_coeffs", obj_coeffs_linear)
+    h5.put_scalar("static_obj_offset", obj.aff.constant)
 end
 
 function _extract_after_load_constrs(model::JuMP.Model, h5)
@@ -143,7 +156,7 @@ function _extract_after_load_constrs(model::JuMP.Model, h5)
         end
     end
     if isempty(names)
-        error("no model constraints found; note that MIPLearn ignores unnamed constraints")
+        return
     end
     lhs = sparse(lhs_rows, lhs_cols, lhs_values, length(rhs), JuMP.num_variables(model))
     h5.put_sparse("static_constr_lhs", lhs)
@@ -282,9 +295,11 @@ function _extract_after_mip(model::JuMP.Model, h5)
 
     # Slacks
     lhs = h5.get_sparse("static_constr_lhs")
-    rhs = h5.get_array("static_constr_rhs")
-    slacks = abs.(lhs * x - rhs)
-    h5.put_array("mip_constr_slacks", slacks)
+    if lhs !== nothing
+        rhs = h5.get_array("static_constr_rhs")
+        slacks = abs.(lhs * x - rhs)
+        h5.put_array("mip_constr_slacks", slacks)
+    end
 
     # Cuts and lazy constraints
     ext = model.ext[:miplearn]
