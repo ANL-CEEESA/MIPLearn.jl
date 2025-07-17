@@ -8,6 +8,8 @@ using HiGHS
 using Random
 using DataStructures
 
+import ..H5FieldsExtractor
+
 global ExpertDualGmiComponent = PyNULL()
 global KnnDualGmiComponent = PyNULL()
 
@@ -253,138 +255,6 @@ function collect_gmi_dual(
     )
 end
 
-function ExpertDualGmiComponent_before_mip(test_h5, model, _)
-    # Read cuts and optimal solution
-    h5 = H5File(test_h5, "r")
-    sol_opt_dict = Dict(
-        zip(
-            h5.get_array("static_var_names"),
-            convert(Array{Float64}, h5.get_array("mip_var_values")),
-        ),
-    )
-    cut_basis_vars = h5.get_array("cuts_basis_vars")
-    cut_basis_sizes = h5.get_array("cuts_basis_sizes")
-    cut_rows = h5.get_array("cuts_rows")
-    obj_mip = h5.get_scalar("mip_lower_bound")
-    if obj_mip === nothing
-        obj_mip = h5.get_scalar("mip_obj_value")
-    end
-    h5.close()
-
-    # Initialize stats
-    stats_time_convert = 0
-    stats_time_tableau = 0
-    stats_time_gmi = 0
-    all_cuts = nothing
-
-    stats_time_convert = @elapsed begin
-        # Extract problem data
-        data = ProblemData(model)
-
-        # Construct optimal solution vector (with correct variable sequence)
-        sol_opt = [sol_opt_dict[n] for n in data.var_names]
-
-        # Assert optimal solution is feasible for the original problem
-        assert_leq(data.constr_lb, data.constr_lhs * sol_opt)
-        assert_leq(data.constr_lhs * sol_opt, data.constr_ub)
-
-        # Convert to standard form
-        data_s, transforms = convert_to_standard_form(data)
-        model_s = to_model(data_s)
-        set_optimizer(model_s, HiGHS.Optimizer)
-        relax_integrality(model_s)
-
-        # Convert optimal solution to standard form
-        sol_opt_s = forward(transforms, sol_opt)
-
-        # Assert converted solution is feasible for standard form problem
-        assert_eq(data_s.constr_lhs * sol_opt_s, data_s.constr_lb)
-
-    end
-
-    current_basis = nothing
-    for (r, row) in enumerate(cut_rows)
-        stats_time_tableau += @elapsed begin
-            if r == 1 || cut_basis_vars[r, :] != cut_basis_vars[r-1, :]
-                vbb, vnn, cbb, cnn = cut_basis_sizes[r, :]
-                current_basis = Basis(;
-                    var_basic = cut_basis_vars[r, 1:vbb],
-                    var_nonbasic = cut_basis_vars[r, vbb+1:vbb+vnn],
-                    constr_basic = cut_basis_vars[r, vbb+vnn+1:vbb+vnn+cbb],
-                    constr_nonbasic = cut_basis_vars[r, vbb+vnn+cbb+1:vbb+vnn+cbb+cnn],
-                )
-            end
-            tableau = compute_tableau(data_s, current_basis, rows = [row])
-            assert_eq(tableau.lhs * sol_opt_s, tableau.rhs)
-        end
-        stats_time_gmi += @elapsed begin
-            cuts_s = compute_gmi(data_s, tableau)
-            assert_does_not_cut_off(cuts_s, sol_opt_s)
-        end
-        cuts = backwards(transforms, cuts_s)
-        assert_does_not_cut_off(cuts, sol_opt)
-
-        if all_cuts === nothing
-            all_cuts = cuts
-        else
-            all_cuts.lhs = [all_cuts.lhs; cuts.lhs]
-            all_cuts.lb = [all_cuts.lb; cuts.lb]
-            all_cuts.ub = [all_cuts.ub; cuts.ub]
-        end
-    end
-
-    # Strategy 1: Add all cuts during the first call
-    function cut_callback_1(cb_data)
-        if all_cuts !== nothing
-            constrs = build_constraints(model, all_cuts)
-            @info "Enforcing $(length(constrs)) cuts..."
-            for c in constrs
-                MOI.submit(model, MOI.UserCut(cb_data), c)
-            end
-            all_cuts = nothing
-        end
-    end
-
-    # Strategy 2: Add violated cuts repeatedly until unable to separate
-    callback_disabled = false
-    function cut_callback_2(cb_data)
-        if callback_disabled
-            return
-        end
-        x = all_variables(model)
-        x_val = callback_value.(cb_data, x)
-        lhs_val = all_cuts.lhs * x_val
-        is_violated = lhs_val .> all_cuts.ub
-        selected_idx = findall(is_violated .== true)
-        selected_cuts = ConstraintSet(
-            lhs=all_cuts.lhs[selected_idx, :],
-            ub=all_cuts.ub[selected_idx],
-            lb=all_cuts.lb[selected_idx],
-        )
-        constrs = build_constraints(model, selected_cuts)
-        if length(constrs) > 0
-            @info "Enforcing $(length(constrs)) cuts..."
-            for c in constrs
-                MOI.submit(model, MOI.UserCut(cb_data), c)
-            end
-        else
-            @info "No violated cuts found. Disabling callback."
-            callback_disabled = true
-        end
-    end
-
-    # Set up cut callback
-    set_attribute(model, MOI.UserCutCallback(), cut_callback_1)
-    # set_attribute(model, MOI.UserCutCallback(), cut_callback_2)
-
-    stats = Dict()
-    stats["ExpertDualGmi: cuts"] = length(all_cuts.lb)
-    stats["ExpertDualGmi: time convert"] = stats_time_convert
-    stats["ExpertDualGmi: time tableau"] = stats_time_tableau
-    stats["ExpertDualGmi: time gmi"] = stats_time_gmi
-    return stats
-end
-
 function add_constraint_set_dual_v2(model::JuMP.Model, cs::ConstraintSet)
     vars = all_variables(model)
     nrows, ncols = size(cs.lhs)
@@ -599,15 +469,7 @@ function KnnDualGmiComponent_before_mip(data::_KnnDualGmiData, test_h5, model, _
 end
 
 function __init_gmi_dual__()
-    @pydef mutable struct Class1
-        function fit(_, _) end
-        function before_mip(self, test_h5, model, stats)
-            ExpertDualGmiComponent_before_mip(test_h5, model.inner, stats)
-        end
-    end
-    copy!(ExpertDualGmiComponent, Class1)
-
-    @pydef mutable struct Class2
+    @pydef mutable struct KnnDualGmiComponentPy
         function __init__(self; extractor, k = 3, strategy = "near")
             self.data = _KnnDualGmiData(; extractor, k, strategy)
         end
@@ -618,7 +480,23 @@ function __init_gmi_dual__()
             return @time KnnDualGmiComponent_before_mip(self.data, test_h5, model.inner, stats)
         end
     end
-    copy!(KnnDualGmiComponent, Class2)
+    copy!(KnnDualGmiComponent, KnnDualGmiComponentPy)
+
+    @pydef mutable struct ExpertDualGmiComponentPy
+        function __init__(self)
+            self.inner = KnnDualGmiComponentPy(
+                extractor=H5FieldsExtractor(instance_fields=["static_var_obj_coeffs"]),
+                k=1,
+            )
+        end
+        function fit(self, train_h5)
+        end
+        function before_mip(self, test_h5, model, stats)
+            self.inner.fit([test_h5])
+            return self.inner.before_mip(test_h5, model, stats)
+        end
+    end
+    copy!(ExpertDualGmiComponent, ExpertDualGmiComponentPy)
 end
 
 export collect_gmi_dual, expert_gmi_dual, ExpertDualGmiComponent, KnnDualGmiComponent
