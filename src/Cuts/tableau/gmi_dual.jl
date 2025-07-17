@@ -323,6 +323,7 @@ function _dualgmi_compress_h5(h5_filename)
     orig_cut_basis_sizes = h5.get_array("cuts_basis_sizes")
     orig_cut_rows = h5.get_array("cuts_rows")
     if orig_cut_basis_vars === nothing
+        @warn "orig_cut_basis_vars is null; skipping file"
         return
     end
     ncuts, _ = size(orig_cut_basis_vars)
@@ -345,6 +346,11 @@ function _dualgmi_compress_h5(h5_filename)
 
     basis_vars = hcat(basis_vars...)'
     basis_sizes = hcat(basis_sizes...)'
+    _, n_vars = size(basis_vars)
+    if n_vars == 0
+        @warn "n_vars is zero; skipping file"
+        return
+    end
 
     h5 = H5File(h5_filename, "r+")
     h5.put_array("gmi_basis_vars", basis_vars)
