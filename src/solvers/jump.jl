@@ -95,7 +95,7 @@ function _extract_after_load_vars(model::JuMP.Model, h5)
     obj_coeffs_linear = [v ∈ keys(obj.aff.terms) ? obj.aff.terms[v] : 0.0 for v in vars]
 
     # Quadratic obj terms
-    if length(obj) > 0
+    if length(obj.terms) > 0
         nvars = length(vars)
         obj_coeffs_quad = zeros(nvars, nvars)
         for (pair, coeff) in obj.terms
