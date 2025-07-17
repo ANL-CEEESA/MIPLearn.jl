@@ -311,6 +311,46 @@ function _dualgmi_features(h5_filename, extractor)
     end
 end
 
+function _dualgmi_compress_h5(h5_filename)
+    vars_to_basis_offset = Dict()
+    basis_vars = []
+    basis_sizes = []
+    cut_basis::Array{Int} = []
+    cut_row::Array{Int} = []
+
+    h5 = H5File(h5_filename, "r")
+    orig_cut_basis_vars = h5.get_array("cuts_basis_vars")
+    orig_cut_basis_sizes = h5.get_array("cuts_basis_sizes")
+    orig_cut_rows = h5.get_array("cuts_rows")
+    ncuts, _ = size(orig_cut_basis_vars)
+    h5.close()
+
+    for i in 1:ncuts
+        vars = orig_cut_basis_vars[i, :]
+        sizes = orig_cut_basis_sizes[i, :]
+        row = orig_cut_rows[i]
+        if vars ∉ keys(vars_to_basis_offset)
+            offset = size(basis_vars)[1] + 1
+            vars_to_basis_offset[vars] = offset
+            push!(basis_vars, vars)
+            push!(basis_sizes, sizes)
+        end
+        offset = vars_to_basis_offset[vars]
+        push!(cut_basis, offset)
+        push!(cut_row, row)
+    end
+
+    basis_vars = hcat(basis_vars...)'
+    basis_sizes = hcat(basis_sizes...)'
+
+    h5 = H5File(h5_filename, "r+")
+    h5.put_array("gmi_basis_vars", basis_vars)
+    h5.put_array("gmi_basis_sizes", basis_sizes)
+    h5.put_array("gmi_cut_basis", cut_basis)
+    h5.put_array("gmi_cut_row", cut_row)
+    h5.file.close()
+end
+
 function _dualgmi_generate(train_h5, model)
     @timeit "Read problem data" begin
         data = ProblemData(model)
@@ -318,54 +358,65 @@ function _dualgmi_generate(train_h5, model)
     @timeit "Convert to standard form" begin
         data_s, transforms = convert_to_standard_form(data)
     end
-
     @timeit "Collect cuts from H5 files" begin
-        vars_to_unique_basis_offset = Dict()
-        unique_basis_vars = nothing
-        unique_basis_sizes = nothing
-        unique_basis_rows = nothing
-    
+        basis_vars_to_basis_offset = Dict()
+        combined_basis_vars = []
+        combined_basis_sizes = []
+        combined_cut_rows = []
         for h5_filename in train_h5
-            h5 = H5File(h5_filename, "r")
-            cut_basis_vars = h5.get_array("cuts_basis_vars")
-            cut_basis_sizes = h5.get_array("cuts_basis_sizes")
-            cut_rows = h5.get_array("cuts_rows")
-            ncuts, nvars = size(cut_basis_vars)
-            if unique_basis_vars === nothing
-                unique_basis_vars = Matrix{Int}(undef, 0, nvars)
-                unique_basis_sizes = Matrix{Int}(undef, 0, 4)
-                unique_basis_rows = Dict{Int,Set{Int}}()                
+            @timeit "get_array (new)" begin
+                h5 = H5File(h5_filename, "r")
+                gmi_basis_vars = h5.get_array("gmi_basis_vars")
+                gmi_basis_sizes = h5.get_array("gmi_basis_sizes")
+                gmi_cut_basis = h5.get_array("gmi_cut_basis")
+                gmi_cut_row = h5.get_array("gmi_cut_row")
+                h5.close()
             end
-            for i in 1:ncuts
-                vars = cut_basis_vars[i, :]
-                sizes = cut_basis_sizes[i, :]
-                row = cut_rows[i]
-                if vars ∉ keys(vars_to_unique_basis_offset)
-                    offset = size(unique_basis_vars)[1] + 1
-                    vars_to_unique_basis_offset[vars] = offset
-                    unique_basis_vars = [unique_basis_vars; vars']
-                    unique_basis_sizes = [unique_basis_sizes; sizes']
-                    unique_basis_rows[offset] = Set()
+            @timeit "combine basis" begin
+                nbasis, _ = size(gmi_basis_vars)
+                local_to_combined_offset = Dict()
+                for local_offset in 1:nbasis
+                    vars = gmi_basis_vars[local_offset, :]
+                    sizes = gmi_basis_sizes[local_offset, :]
+                    if vars ∉ keys(basis_vars_to_basis_offset)
+                        combined_offset = length(combined_basis_vars) + 1
+                        basis_vars_to_basis_offset[vars] = combined_offset
+                        push!(combined_basis_vars, vars)
+                        push!(combined_basis_sizes, sizes)
+                        push!(combined_cut_rows, Set{Int}())
+                    end
+                    combined_offset = basis_vars_to_basis_offset[vars]
+                    local_to_combined_offset[local_offset] = combined_offset
                 end
-                offset = vars_to_unique_basis_offset[vars]
-                push!(unique_basis_rows[offset], row)
             end
-            h5.close()
+            @timeit "combine rows" begin
+                ncuts = length(gmi_cut_row)
+                for i in 1:ncuts
+                    local_offset = gmi_cut_basis[i]
+                    combined_offset = local_to_combined_offset[local_offset]
+                    row = gmi_cut_row[i]
+                    push!(combined_cut_rows[combined_offset], row)
+                end
+            end
+            @timeit "convert lists to matrices" begin
+                combined_basis_vars = hcat(combined_basis_vars...)'
+                combined_basis_sizes = hcat(combined_basis_sizes...)'
+            end
         end
     end
-
     @timeit "Compute tableaus and cuts" begin
         all_cuts = nothing
-        for (offset, rows) in unique_basis_rows
+        nbasis = length(combined_cut_rows)
+        for offset in 1:nbasis
+            rows = combined_cut_rows[offset]
             try
-                vbb, vnn, cbb, cnn = unique_basis_sizes[offset, :]
+                vbb, vnn, cbb, cnn = combined_basis_sizes[offset, :]
                 current_basis = Basis(;
-                    var_basic = unique_basis_vars[offset, 1:vbb],
-                    var_nonbasic = unique_basis_vars[offset, vbb+1:vbb+vnn],
-                    constr_basic = unique_basis_vars[offset, vbb+vnn+1:vbb+vnn+cbb],
-                    constr_nonbasic = unique_basis_vars[offset, vbb+vnn+cbb+1:vbb+vnn+cbb+cnn],
+                    var_basic = combined_basis_vars[offset, 1:vbb],
+                    var_nonbasic = combined_basis_vars[offset, vbb+1:vbb+vnn],
+                    constr_basic = combined_basis_vars[offset, vbb+vnn+1:vbb+vnn+cbb],
+                    constr_nonbasic = combined_basis_vars[offset, vbb+vnn+cbb+1:vbb+vnn+cbb+cnn],
                 )
-
                 tableau = compute_tableau(data_s, current_basis; rows=collect(rows))
                 cuts_s = compute_gmi(data_s, tableau)
                 cuts = backwards(transforms, cuts_s)
