@@ -132,14 +132,9 @@ function collect_gmi_dual(
         @timeit "Compute GMI cuts" begin
             cuts_s = compute_gmi(data_s, tableau)
 
-            try
-                # Assert cuts have been generated correctly
-                assert_cuts_off(cuts_s, sol_frac)
-                assert_does_not_cut_off(cuts_s, sol_opt_s)
-            catch
-                @warn "Numerical error. Aborting."
-                break
-            end
+            # Assert cuts have been generated correctly
+            assert_cuts_off(cuts_s, sol_frac)
+            assert_does_not_cut_off(cuts_s, sol_opt_s)
 
             # Abort if no cuts are left
             if length(cuts_s.lb) == 0
