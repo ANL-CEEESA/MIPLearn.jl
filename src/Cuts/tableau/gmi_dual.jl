@@ -26,8 +26,10 @@ function collect_gmi_dual(
     optimizer,
     max_rounds = 10,
     max_cuts_per_round = 500,
+    time_limit = 3_600,
 )
     reset_timer!()
+    initial_time = time()
 
     @timeit "Read H5" begin
         h5_filename = replace(mps_filename, ".mps.gz" => ".h5")
@@ -130,9 +132,14 @@ function collect_gmi_dual(
         @timeit "Compute GMI cuts" begin
             cuts_s = compute_gmi(data_s, tableau)
 
-            # Assert cuts have been generated correctly
-            assert_cuts_off(cuts_s, sol_frac)
-            assert_does_not_cut_off(cuts_s, sol_opt_s)
+            try
+                # Assert cuts have been generated correctly
+                assert_cuts_off(cuts_s, sol_frac)
+                assert_does_not_cut_off(cuts_s, sol_opt_s)
+            catch
+                @warn "Numerical error. Aborting."
+                break
+            end
 
             # Abort if no cuts are left
             if length(cuts_s.lb) == 0
@@ -206,6 +213,12 @@ function collect_gmi_dual(
                 obj_original -
                 sum(sp[i] * gmi_exps[i] for (i, c) in enumerate(constrs) if useful[i]),
             )
+        end
+
+        elapsed_time = time() - initial_time
+        if elapsed_time > time_limit
+            @info "Time limit exceeded. Stopping."
+            break
         end
     end
 
@@ -322,12 +335,15 @@ function _dualgmi_compress_h5(h5_filename)
     orig_cut_basis_vars = h5.get_array("cuts_basis_vars")
     orig_cut_basis_sizes = h5.get_array("cuts_basis_sizes")
     orig_cut_rows = h5.get_array("cuts_rows")
+    h5.close()
     if orig_cut_basis_vars === nothing
         @warn "orig_cut_basis_vars is null; skipping file"
         return
     end
     ncuts, _ = size(orig_cut_basis_vars)
-    h5.close()
+    if ncuts == 0
+        return
+    end
 
     for i in 1:ncuts
         vars = orig_cut_basis_vars[i, :]
