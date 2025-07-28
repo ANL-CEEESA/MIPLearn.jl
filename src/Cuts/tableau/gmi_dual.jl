@@ -389,6 +389,10 @@ function _dualgmi_generate(train_h5, model)
             @timeit "get_array (new)" begin
                 h5 = H5File(h5_filename, "r")
                 gmi_basis_vars = h5.get_array("gmi_basis_vars")
+                if gmi_basis_vars === nothing
+                    @warn "$(h5_filename) does not contain gmi_basis_vars; skipping"
+                    continue
+                end
                 gmi_basis_sizes = h5.get_array("gmi_basis_sizes")
                 gmi_cut_basis = h5.get_array("gmi_cut_basis")
                 gmi_cut_row = h5.get_array("gmi_cut_row")
